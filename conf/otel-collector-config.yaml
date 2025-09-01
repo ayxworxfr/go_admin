@@ -1,0 +1,76 @@
+receivers:
+  otlp:
+    # 接收 OpenTelemetry Protocol (OTLP) 格式的遥测数据，支持 gRPC 和 HTTP 协议
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"          # 监听 gRPC 协议的 OTLP 数据，容器内端口
+        read_buffer_size: 524288          # 读取缓冲区大小（512KiB），提高大流量下的接收稳定性
+        max_recv_msg_size_mib: 16         # 最大接收消息大小（16MiB），支持较大的跨度数据
+      http:
+        endpoint: "0.0.0.0:4318"          # 监听 HTTP 协议的 OTLP 数据，容器内端口
+        cors:
+          allowed_origins:
+            - "*"                        # 允许所有来源的跨域请求，便于本地调试
+
+processors:
+  batch:
+    # 批处理处理器，将多个跨度合并发送，平衡性能和延迟
+    timeout: 1s                       # 批处理超时时间，1秒未达到批量大小时强制发送
+    send_batch_size: 100               # 每次发送的最大跨度数，推荐值（兼顾延迟和吞吐量）
+    send_batch_max_size: 200           # 批处理的最大跨度数，防止内存占用过高
+  resource:
+    # 资源属性处理器，为所有数据添加固定的资源属性
+    attributes:
+      - key: service.name
+        value: "go-admin"             # 服务名称，将显示在 Jaeger UI 中
+        action: upsert                 # 若属性不存在则插入，存在则更新
+      - key: env
+        value: "production"            # 环境标签，区分开发/生产环境数据
+        action: upsert
+
+exporters:
+  jaeger:
+    # 导出数据到 Jaeger 分布式追踪系统
+    endpoint: "jaeger:14250"          # Jaeger 的 gRPC 接收端点（容器名+端口）
+    tls:
+      insecure: true                   # 开发环境禁用 TLS 验证，生产环境建议启用
+    retry_on_failure:
+      # 失败重试机制，应对临时网络问题
+      enabled: true                    # 启用重试
+      initial_interval: 5s             # 初始重试间隔
+      max_interval: 30s                # 最大重试间隔
+      max_elapsed_time: 300s           # 最大重试总时间
+    sending_queue:
+      # 发送队列配置，提高并发处理能力
+      enabled: true                    # 启用发送队列
+      num_consumers: 2                 # 消费者数量，控制并发导出
+      queue_size: 1000                 # 队列大小，临时存储待发送的数据
+  logging:
+    # 导出数据到日志，用于调试和问题排查
+    verbosity: normal                  # 日志详细程度
+    sampling_initial: 5                # 初始采样数，前5条数据全量记录
+    sampling_thereafter: 20            # 后续采样频率，每20条记录1条
+
+extensions:
+  health_check: {}                     # 健康检查扩展，提供服务健康状态接口
+  pprof: {}                            # pprof 扩展，用于性能分析
+  zpages: {}                           # zpages 扩展，提供调试用的 Web 界面
+
+service:
+  pipelines:
+    traces:
+      # 追踪数据处理管道
+      receivers: [otlp]                # 使用 otlp 接收器
+      processors: [batch, resource]    # 依次使用批处理和资源处理器
+      exporters: [jaeger, logging]     # 同时导出到 Jaeger 和日志
+  telemetry:
+    metrics:
+      address: "0.0.0.0:8888"          # 暴露 Collector 自身指标的地址
+      level: detailed                  # 指标详细程度
+    logs:
+      level: info                      # Collector 日志级别（生产环境使用 info）
+      encoding: console                # 日志编码格式
+  extensions:
+    - health_check                    # 启用健康检查扩展
+    - pprof                           # 启用 pprof 扩展
+    - zpages                          # 启用 zpages 扩展

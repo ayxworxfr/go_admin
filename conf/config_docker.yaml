@@ -1,0 +1,49 @@
+server:
+  port: 8888
+
+database:
+  host: mysql               # Docker容器名称
+  port: 3306
+  user: admin
+  password: admin123456
+  dbname: go_admin
+  max_idle_conns: 10
+  max_open_conns: 100
+  conn_max_lifetime: 3600   # 1 hour in seconds
+  show_sql: false
+
+# Redis配置
+redis:
+  host: redis               # Docker容器名称
+  port: 6379
+  password: ""              # 如需要可设置密码
+  db: 0
+  pool_size: 10
+  min_idle_conns: 5
+
+jwt:
+  secret: scaffold_jwt_secret_key_2024
+  access_token_exp: 8h
+  refresh_token_exp: 7d
+
+logger:
+  log_file: "./logs/app.log"
+  level: "info"
+  max_size: 100             # 100 MB
+  max_backups: 3
+  max_age: 28               # 28 days
+  compress: true
+  console: true
+
+opentelemetry:
+  enable: true              # 启用OpenTelemetry
+  service: go-admin-scaffold # 服务名称
+  endpoint: otel-collector:4317 # 指向Collector容器
+  protocol: grpc            # 协议
+  sampling: 1.0             # 开发环境建议全采样
+  timeout: 5                # 超时时间5秒
+
+tasks:
+  - name: health_task
+    cron_expr: "*/5 * * * *" # 每5分钟执行一次健康检查
+    disabled: false

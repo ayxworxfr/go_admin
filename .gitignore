@@ -1,0 +1,60 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+build/
+dist/
+
+# Test binaries
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below if you use Go pkg)
+# /vendor/
+
+# Go workspace file
+go.work
+
+# Go module files
+# go.sum
+
+# Editor and IDE specific files
+.idea/
+*.swp
+*.swo
+*.swn
+*.bak
+*.tmp
+*.key
+*.backup
+*.DS_Store
+coverage.*
+test-results.xml
+.make_deps_installed
+__debug*
+
+# Log files
+*logs*
+*.log
+
+# Environment variable files
+.env
+
+# MacOS specific files
+.DS_Store
+
+# Node pkg for frontend projects
+node_modules/
+
+# Ignore coverage files
+coverage.out
+
+# Linux/Unix specific files
+*~
+
+# Specific file or directory patterns
+# Add any additional patterns below if needed

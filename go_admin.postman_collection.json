@@ -1,0 +1,1310 @@
+{
+	"info": {
+		"_postman_id": "71bf7adb-6098-4c40-952f-cf24b3da6901",
+		"name": "go_admin",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "6698748"
+	},
+	"item": [
+		{
+			"name": "auth",
+			"item": [
+				{
+					"name": "GetUserRoutes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/user/routes",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"user",
+								"routes"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetUserCurrent",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/user/current",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"user",
+								"current"
+							],
+							"query": [
+								{
+									"key": "id",
+									"value": "1",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetRolePermissions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/role/permissions?limit=10&offset=0&role_id=1&flags=1",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"role",
+								"permissions"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "role_id",
+									"value": "1"
+								},
+								{
+									"key": "flags",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetRoleList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/role/list?limit=10&offset=0&flags=3",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"role",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "flags",
+									"value": "3"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "CreateRole",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\": \"系统管理员\",\r\n    \"code\": \"go_admin\",\r\n    \"description\": \"系统最高权限角色，负责系统初始化和全局管理\",\r\n    \"status\": 1,\r\n    \"permission_ids\": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/role",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"role"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "CreateRoleBatch",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"roles\": [\r\n    {\r\n      \"name\": \"系统管理员\",\r\n      \"code\": \"go_admin\",\r\n      \"description\": \"系统最高权限角色，负责系统初始化和全局管理\",\r\n      \"status\": 1,\r\n      \"permission_ids\": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]\r\n    },\r\n    {\r\n      \"name\": \"销售总监\",\r\n      \"code\": \"sales_director\",\r\n      \"description\": \"销售部门最高负责人，管理销售团队和数据分析\",\r\n      \"status\": 1,\r\n      \"permission_ids\": [7, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 27, 28, 29]\r\n    },\r\n    {\r\n      \"name\": \"销售经理\",\r\n      \"code\": \"sales_manager\",\r\n      \"description\": \"销售团队管理者，负责客户分配、订单审核和团队绩效\",\r\n      \"status\": 1,\r\n      \"permission_ids\": [7, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22]\r\n    },\r\n    {\r\n      \"name\": \"销售专员\",\r\n      \"code\": \"sales_rep\",\r\n      \"description\": \"一线销售角色，负责客户跟进、商机创建和订单执行\",\r\n      \"status\": 1,\r\n      \"permission_ids\": [7, 8, 9, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22]\r\n    },\r\n    {\r\n      \"name\": \"客服主管\",\r\n      \"code\": \"cs_manager\",\r\n      \"description\": \"客服部门负责人，管理客户服务团队和工单流程\",\r\n      \"status\": 1,\r\n      \"permission_ids\": [7, 8, 9, 11, 12, 13, 14, 15, 23, 24, 25, 26, 27]\r\n    },\r\n    {\r\n      \"name\": \"客服专员\",\r\n      \"code\": \"cs_rep\",\r\n      \"description\": \"客服角色，负责客户咨询回复、工单处理和满意度调查\",\r\n      \"status\": 1,\r\n      \"permission_ids\": [7, 8, 9, 11, 12, 13, 14, 23, 24, 25, 26]\r\n    },\r\n    {\r\n      \"name\": \"市场总监\",\r\n      \"code\": \"marketing_director\",\r\n      \"description\": \"市场部门负责人，管理营销活动和线索分析\",\r\n      \"status\": 1,\r\n      \"permission_ids\": [7, 8, 9, 11, 12, 13, 27, 28, 29]\r\n    },\r\n    {\r\n      \"name\": \"普通员工\",\r\n      \"code\": \"employee\",\r\n      \"description\": \"基础角色，拥有个人数据查看和基础功能权限\",\r\n      \"status\": 1,\r\n      \"permission_ids\": [7, 8, 11, 12, 27]\r\n    }\r\n  ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/role/batch",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"role",
+								"batch"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "UpdateRole",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"id\": 1,\r\n  \"name\": \"管理员\",\r\n  \"code\": \"admin\",\r\n  \"description\": \"系统管理员角色\",\r\n  \"status\": 1,\r\n  \"permission_ids\": [1, 2]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/role",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"role"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetPermissionList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/permission/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"permission",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "CreatePermissionBatch",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"permissions\": [\r\n        // 用户管理\r\n        {\r\n            \"id\": 1,\r\n            \"name\": \"用户管理\",\r\n            \"code\": \"user:management\",\r\n            \"description\": \"用户管理模块\",\r\n            \"parent_id\": 0,\r\n            \"type\": 1,\r\n            \"path\": \"/api/protected/user/*\",\r\n            \"method\": \"*\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 2,\r\n            \"name\": \"查看用户列表\",\r\n            \"code\": \"user:list\",\r\n            \"description\": \"查看系统用户列表\",\r\n            \"parent_id\": 1,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/user/list\",\r\n            \"method\": \"GET\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 3,\r\n            \"name\": \"创建用户\",\r\n            \"code\": \"user:create\",\r\n            \"description\": \"创建新用户\",\r\n            \"parent_id\": 1,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/user\",\r\n            \"method\": \"POST\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 4,\r\n            \"name\": \"编辑用户\",\r\n            \"code\": \"user:edit\",\r\n            \"description\": \"编辑用户信息\",\r\n            \"parent_id\": 1,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/user/{id}\",\r\n            \"method\": \"PUT\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 5,\r\n            \"name\": \"删除用户\",\r\n            \"code\": \"user:delete\",\r\n            \"description\": \"删除用户\",\r\n            \"parent_id\": 1,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/user/{id}\",\r\n            \"method\": \"DELETE\",\r\n            \"status\": 1\r\n        },\r\n        \r\n        // 角色与权限\r\n        {\r\n            \"id\": 6,\r\n            \"name\": \"角色管理\",\r\n            \"code\": \"role:management\",\r\n            \"description\": \"角色与权限管理\",\r\n            \"parent_id\": 0,\r\n            \"type\": 1,\r\n            \"path\": \"/api/protected/role/*\",\r\n            \"method\": \"*\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 7,\r\n            \"name\": \"查看角色列表\",\r\n            \"code\": \"role:list\",\r\n            \"description\": \"查看系统角色列表\",\r\n            \"parent_id\": 6,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/roles\",\r\n            \"method\": \"GET\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 8,\r\n            \"name\": \"创建角色\",\r\n            \"code\": \"role:create\",\r\n            \"description\": \"创建新角色\",\r\n            \"parent_id\": 6,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/role\",\r\n            \"method\": \"POST\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 9,\r\n            \"name\": \"编辑角色\",\r\n            \"code\": \"role:edit\",\r\n            \"description\": \"编辑角色信息\",\r\n            \"parent_id\": 6,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/role/{id}\",\r\n            \"method\": \"PUT\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 10,\r\n            \"name\": \"权限管理\",\r\n            \"code\": \"permission:management\",\r\n            \"description\": \"为角色分配权限\",\r\n            \"parent_id\": 0,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/permission/*\",\r\n            \"method\": \"*\",\r\n            \"status\": 1\r\n        },\r\n        \r\n        // 客户管理\r\n        {\r\n            \"id\": 11,\r\n            \"name\": \"客户管理\",\r\n            \"code\": \"customer:management\",\r\n            \"description\": \"客户信息管理\",\r\n            \"parent_id\": 0,\r\n            \"type\": 1,\r\n            \"path\": \"/api/protected/customer/*\",\r\n            \"method\": \"*\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 12,\r\n            \"name\": \"查看客户列表\",\r\n            \"code\": \"customer:list\",\r\n            \"description\": \"查看客户列表\",\r\n            \"parent_id\": 11,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/customer\",\r\n            \"method\": \"GET\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 13,\r\n            \"name\": \"创建客户\",\r\n            \"code\": \"customer:create\",\r\n            \"description\": \"创建新客户\",\r\n            \"parent_id\": 11,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/customer\",\r\n            \"method\": \"POST\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 14,\r\n            \"name\": \"编辑客户\",\r\n            \"code\": \"customer:edit\",\r\n            \"description\": \"编辑客户信息\",\r\n            \"parent_id\": 11,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/customer/{id}\",\r\n            \"method\": \"PUT\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 15,\r\n            \"name\": \"删除客户\",\r\n            \"code\": \"customer:delete\",\r\n            \"description\": \"删除客户\",\r\n            \"parent_id\": 11,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/customer/{id}\",\r\n            \"method\": \"DELETE\",\r\n            \"status\": 1\r\n        },\r\n        \r\n        // 销售管理\r\n        {\r\n            \"id\": 16,\r\n            \"name\": \"销售管理\",\r\n            \"code\": \"sales:management\",\r\n            \"description\": \"销售业务管理\",\r\n            \"parent_id\": 0,\r\n            \"type\": 1,\r\n            \"path\": \"/api/protected/sale/*\",\r\n            \"method\": \"*\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 17,\r\n            \"name\": \"商机管理\",\r\n            \"code\": \"opportunity:management\",\r\n            \"description\": \"销售商机管理\",\r\n            \"parent_id\": 16,\r\n            \"type\": 1,\r\n            \"path\": \"/api/protected/sales/opportunities\",\r\n            \"method\": \"*\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 18,\r\n            \"name\": \"查看商机列表\",\r\n            \"code\": \"opportunity:list\",\r\n            \"description\": \"查看商机列表\",\r\n            \"parent_id\": 17,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/sales/opportunities\",\r\n            \"method\": \"GET\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 19,\r\n            \"name\": \"创建商机\",\r\n            \"code\": \"opportunity:create\",\r\n            \"description\": \"创建新商机\",\r\n            \"parent_id\": 17,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/sales/opportunities\",\r\n            \"method\": \"POST\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 20,\r\n            \"name\": \"订单管理\",\r\n            \"code\": \"order:management\",\r\n            \"description\": \"销售订单管理\",\r\n            \"parent_id\": 16,\r\n            \"type\": 1,\r\n            \"path\": \"/api/protected/sales/orders\",\r\n            \"method\": \"*\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 21,\r\n            \"name\": \"查看订单列表\",\r\n            \"code\": \"order:list\",\r\n            \"description\": \"查看订单列表\",\r\n            \"parent_id\": 20,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/sales/orders\",\r\n            \"method\": \"GET\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 22,\r\n            \"name\": \"创建订单\",\r\n            \"code\": \"order:create\",\r\n            \"description\": \"创建新订单\",\r\n            \"parent_id\": 20,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/sales/orders\",\r\n            \"method\": \"POST\",\r\n            \"status\": 1\r\n        },\r\n        \r\n        // 客服管理\r\n        {\r\n            \"id\": 23,\r\n            \"name\": \"客服管理\",\r\n            \"code\": \"service:management\",\r\n            \"description\": \"客户服务管理\",\r\n            \"parent_id\": 0,\r\n            \"type\": 1,\r\n            \"path\": \"/api/protected/service/*\",\r\n            \"method\": \"*\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 24,\r\n            \"name\": \"工单管理\",\r\n            \"code\": \"ticket:management\",\r\n            \"description\": \"客户服务工单\",\r\n            \"parent_id\": 23,\r\n            \"type\": 1,\r\n            \"path\": \"/api/protected/service/tickets\",\r\n            \"method\": \"*\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 25,\r\n            \"name\": \"查看工单列表\",\r\n            \"code\": \"ticket:list\",\r\n            \"description\": \"查看工单列表\",\r\n            \"parent_id\": 24,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/service/tickets\",\r\n            \"method\": \"GET\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 26,\r\n            \"name\": \"创建工单\",\r\n            \"code\": \"ticket:create\",\r\n            \"description\": \"创建新工单\",\r\n            \"parent_id\": 24,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/service/tickets\",\r\n            \"method\": \"POST\",\r\n            \"status\": 1\r\n        },\r\n        \r\n        // 报表分析\r\n        {\r\n            \"id\": 27,\r\n            \"name\": \"销售报表\",\r\n            \"code\": \"report:sales\",\r\n            \"description\": \"销售数据报表\",\r\n            \"parent_id\": 0,\r\n            \"type\": 1,\r\n            \"path\": \"/api/protected/report/sales\",\r\n            \"method\": \"GET\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 28,\r\n            \"name\": \"客户分析\",\r\n            \"code\": \"report:customer_analysis\",\r\n            \"description\": \"客户数据分析\",\r\n            \"parent_id\": 27,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/report/customer-analysis\",\r\n            \"method\": \"GET\",\r\n            \"status\": 1\r\n        },\r\n        {\r\n            \"id\": 29,\r\n            \"name\": \"销售趋势\",\r\n            \"code\": \"report:sales_trend\",\r\n            \"description\": \"销售趋势分析\",\r\n            \"parent_id\": 27,\r\n            \"type\": 2,\r\n            \"path\": \"/api/protected/report/sales-trend\",\r\n            \"method\": \"GET\",\r\n            \"status\": 1\r\n        }\r\n    ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/permission/batch",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"permission",
+								"batch"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetUserRoles",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/user/roles?limit=10&offset=0&user_id=1",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"user",
+								"roles"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "user_id",
+									"value": "1"
+								},
+								{
+									"key": "flags",
+									"value": "3",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "UserAssignRoles",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"user_id\": 1,\r\n  \"role_ids\": [1]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/user/assign/roles",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"user",
+								"assign",
+								"roles"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "data_permission",
+			"item": [
+				{
+					"name": "GetDataPermissionList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/user/data/permission/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"user",
+								"data",
+								"permission",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetMyLockResources",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/user/my/locked/resources?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"user",
+								"my",
+								"locked",
+								"resources"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "LockResource",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"resource_type\": \"customer\",\n\t\"resource_id\": 1,\n    \"level\": 1,\n\t\"lock_reason\": \"test\",\n\t\"expire_hours\": 0\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/user/lock/resource",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"user",
+								"lock",
+								"resource"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "UnlockResource",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"resource_type\": \"customer\",\n\t\"resource_id\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/user/unlock/resource",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"user",
+								"unlock",
+								"resource"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "CheckResourcePermission",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": 1,\n\t\"resource_type\": \"customer\",\n\t\"resource_id\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/user/check/resource/permission",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"user",
+								"check",
+								"resource",
+								"permission"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "business",
+			"item": [
+				{
+					"name": "GetCustomerList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/customer/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"customer",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetOrderList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/order/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"order",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetContractList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/contract/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"contract",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetProductList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/product/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"product",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetContractList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/contract/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"contract",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetDepartmentList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/department/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"department",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetSalesOpportunityList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/sales/opportunity/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"sales",
+								"opportunity",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetProductCategoryList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/product/category/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"product",
+								"category",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetOpportunityTimelineList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/opportunity/timeline/list?limit=100&offset=0&opportunity_id=1",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"opportunity",
+								"timeline",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								},
+								{
+									"key": "opportunity_id",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GetServiceTicketList",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/service/ticket/list?limit=100&offset=0",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"service",
+								"ticket",
+								"list"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "100"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Metric",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8719/metric",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8719",
+					"path": [
+						"metric"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Hello",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{go_admin_address}}/api/hello",
+					"host": [
+						"{{go_admin_address}}"
+					],
+					"path": [
+						"api",
+						"hello"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Login",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Fixed TypeError by replacing pm.fail with pm.expect",
+							"const statusCode = pm.response.code;",
+							"pm.test(\"状态码为 200\", function () {",
+							"    pm.expect(statusCode).to.eql(200);",
+							"});",
+							"",
+							"// 2. 仅当状态码为 200 时，提取并设置 Token 到 Collection Variables",
+							"if (statusCode === 200) {",
+							"    try {",
+							"        const responseJSON = pm.response.json();",
+							"        if (!responseJSON.data) {",
+							"            pm.expect.fail(\"响应体缺少 data 字段\");",
+							"            return;",
+							"        }",
+							"        ",
+							"        const accessToken = responseJSON.data.access_token;",
+							"        const refreshToken = responseJSON.data.refresh_token;",
+							"        ",
+							"        if (!accessToken || !refreshToken) {",
+							"            pm.expect.fail(\"Token 字段为空\");",
+							"            return;",
+							"        }",
+							"        ",
+							"        // 设置为 Collection Variables（作用域为当前集合）",
+							"        pm.collectionVariables.set(\"college_access_token\", accessToken);",
+							"        pm.collectionVariables.set(\"college_refresh_token\", refreshToken);",
+							"        ",
+							"        pm.test(\"Token 保存到 Collection Variables 成功\", function () {",
+							"            pm.expect(pm.collectionVariables.get(\"college_access_token\")).to.not.be.empty;",
+							"            pm.expect(pm.collectionVariables.get(\"college_refresh_token\")).to.not.be.empty;",
+							"        });",
+							"        ",
+							"    } catch (error) {",
+							"        pm.expect.fail(`解析响应体失败: ${error.message}`);",
+							"    }",
+							"} else {",
+							"    pm.test(\"状态码非 200，不执行 Token 赋值\", function () {",
+							"        // 验证 Collection Variables 未被设置",
+							"        pm.expect(pm.collectionVariables.get(\"college_access_token\")).to.be.undefined;",
+							"        pm.expect(pm.collectionVariables.get(\"college_refresh_token\")).to.be.undefined;",
+							"    });",
+							"}",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"123456\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{go_admin_address}}/api/login",
+					"host": [
+						"{{go_admin_address}}"
+					],
+					"path": [
+						"api",
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "LoginOut",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"123456\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{go_admin_address}}/api/login/out",
+					"host": [
+						"{{go_admin_address}}"
+					],
+					"path": [
+						"api",
+						"login",
+						"out"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "RefreshToken",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// 1. 检查状态码是否为 200",
+							"const statusCode = pm.response.code;",
+							"pm.test(\"状态码为 200\", function () {",
+							"    pm.expect(statusCode).to.eql(200);",
+							"});",
+							"",
+							"// 2. 仅当状态码为 200 时，提取并设置 Token 到 Collection Variables",
+							"if (statusCode === 200) {",
+							"    try {",
+							"        const responseJSON = pm.response.json();",
+							"        if (!responseJSON.data) {",
+							"            pm.fail(\"响应体缺少 data 字段\");",
+							"            return;",
+							"        }",
+							"        ",
+							"        const accessToken = responseJSON.data.access_token;",
+							"        const refreshToken = responseJSON.data.refresh_token;",
+							"        ",
+							"        if (!accessToken || !refreshToken) {",
+							"            pm.fail(\"Token 字段为空\");",
+							"            return;",
+							"        }",
+							"        ",
+							"        // 设置为 Collection Variables（作用域为当前集合）",
+							"        pm.collectionVariables.set(\"college_access_token\", accessToken);",
+							"        pm.collectionVariables.set(\"college_refresh_token\", refreshToken);",
+							"        ",
+							"        pm.test(\"Token 保存到 Collection Variables 成功\", function () {",
+							"            pm.expect(pm.collectionVariables.get(\"college_access_token\")).to.not.be.empty;",
+							"            pm.expect(pm.collectionVariables.get(\"college_refresh_token\")).to.not.be.empty;",
+							"        });",
+							"        ",
+							"    } catch (error) {",
+							"        pm.fail(`解析响应体失败: ${error.message}`);",
+							"    }",
+							"} else {",
+							"    pm.test(\"状态码非 200，不执行 Token 赋值\", function () {",
+							"        // 验证 Collection Variables 未被设置",
+							"        pm.expect(pm.collectionVariables.get(\"college_access_token\")).to.be.undefined;",
+							"        pm.expect(pm.collectionVariables.get(\"college_refresh_token\")).to.be.undefined;",
+							"    });",
+							"}"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"refresh_token\": \"{{college_refresh_token}}\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{go_admin_address}}/api/refresh/token",
+					"host": [
+						"{{go_admin_address}}"
+					],
+					"path": [
+						"api",
+						"refresh",
+						"token"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Protected",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"password\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{go_admin_address}}/api/protected/test",
+					"host": [
+						"{{go_admin_address}}"
+					],
+					"path": [
+						"api",
+						"protected",
+						"test"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "CreateUser",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"password\",\r\n    \"email\": \"test@example.com\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{go_admin_address}}/api/protected/user",
+					"host": [
+						"{{go_admin_address}}"
+					],
+					"path": [
+						"api",
+						"protected",
+						"user"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "DeleteUser",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"username\": \"admin\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{go_admin_address}}/api/protected/user",
+					"host": [
+						"{{go_admin_address}}"
+					],
+					"path": [
+						"api",
+						"protected",
+						"user"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "UpdateUser",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"id\": 1,\r\n    \"username\": \"admin\",\r\n    \"password\": \"123456\",\r\n    \"email\": \"test@example.com\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{go_admin_address}}/api/protected/user",
+					"host": [
+						"{{go_admin_address}}"
+					],
+					"path": [
+						"api",
+						"protected",
+						"user"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "GetUser",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{go_admin_address}}/api/protected/user?username=admin",
+					"host": [
+						"{{go_admin_address}}"
+					],
+					"path": [
+						"api",
+						"protected",
+						"user"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "1",
+							"disabled": true
+						},
+						{
+							"key": "username",
+							"value": "admin"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "GetUserList",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{go_admin_address}}/api/protected/user/list?limit=10&offset=0",
+					"host": [
+						"{{go_admin_address}}"
+					],
+					"path": [
+						"api",
+						"protected",
+						"user",
+						"list"
+					],
+					"query": [
+						{
+							"key": "limit",
+							"value": "10"
+						},
+						{
+							"key": "offset",
+							"value": "0"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{college_access_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// 获取当前响应的状态码",
+					"const statusCode = pm.response.code;",
+					"",
+					"// 检查状态码是否为 2xx（200-299）",
+					"pm.test(\"Success\", function () {",
+					"    pm.expect(statusCode).to.be.at.least(200).and.to.be.below(300);",
+					"});",
+					"",
+					"// 处理非 2xx 状态码",
+					"if (statusCode < 200 || statusCode >= 300) {",
+					"    let errorMessage = \"\";",
+					"    ",
+					"    // 尝试解析响应体为 JSON",
+					"    try {",
+					"        const responseJSON = pm.response.json();",
+					"        errorMessage = responseJSON.message || responseJSON.error || \"响应体包含 JSON 但无 message 字段\";",
+					"    } catch (error) {",
+					"        // 响应体非 JSON，直接获取原始文本",
+					"        errorMessage = pm.response.text() || \"无响应内容\";",
+					"    }",
+					"    ",
+					"    // 标记测试失败并显示消息",
+					"    pm.test(`状态码 ${statusCode}, error: ${errorMessage}`, function () {",
+					"        pm.expect(false).to.be.true, errorMessage;",
+					"    });",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "college_access_token",
+			"value": ""
+		},
+		{
+			"key": "college_refresh_token",
+			"value": ""
+		},
+		{
+			"key": "go_admin_address",
+			"value": "http://localhost:8888",
+			"type": "string"
+		},
+		{
+			"key": "go_admin_address",
+			"value": "http://localhost",
+			"type": "string",
+			"disabled": true
+		}
+	]
+}

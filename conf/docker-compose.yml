@@ -1,0 +1,129 @@
+networks:
+  go_network:
+    driver: bridge
+
+services:
+  # 应用实例1
+  app1:
+    image: go_admin-app:latest
+    environment:
+      - PORT=8888
+      - INSTANCE_ID=app1
+      - TZ=Asia/Shanghai
+      - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317  # ✅ 指向 Collector 容器内端口
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_TRACES_EXPORTER=otlp
+    networks:
+      - go_network
+    volumes:
+      - ../conf:/app/conf              # 挂载配置目录
+      - ./logs/app1:/app/logs          # 挂载日志目录
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api/hello"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - jaeger
+
+  # 应用实例2
+  app2:
+    image: go_admin-app:latest
+    environment:
+      - PORT=8888
+      - INSTANCE_ID=app2
+      - TZ=Asia/Shanghai
+      - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317  # ✅ 指向 Collector 容器内端口
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_TRACES_EXPORTER=otlp
+    volumes:
+      - ../conf:/app/conf              # 挂载配置目录
+      - ./logs/app2:/app/logs          # 挂载日志目录
+    networks:
+      - go_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api/hello"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.46
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # gRPC/OTLP 端口
+      - "4317:4317"    # OTLP gRPC 端口
+      - "4318:4318"    # HTTP/OTLP 端口
+    networks:
+      - go_network
+    environment:
+      - TZ=Asia/Shanghai
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_OTLP_HOST_PORT=0.0.0.0:14250
+      - COLLECTOR_OTLP_HTTP_HOST_PORT=0.0.0.0:4318
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.84.0
+    ports:
+      - "43170:4317"  # gRPC 端口（可选）
+      - "43180:4318"  # ✅ HTTP 端口（本地应用使用）
+    networks:
+      - go_network
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml  # ✅ 使用官方默认路径
+    environment:
+      - TZ=Asia/Shanghai
+    depends_on:
+      - jaeger
+
+  # Caddy负载均衡器
+  caddy:
+    image: caddy:2.8.4-alpine  # 升级到2.8.0+版本
+    ports:
+      - "80:80"     
+      - "443:443"   
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./logs/caddy:/var/log/caddy
+    networks:
+      - go_network
+    depends_on:
+      - app1
+      - app2
+    # restart: always
+
+  # 监控服务
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - go_network
+    depends_on:
+      - app1
+      - app2
+
+  # Grafana监控面板
+  grafana:
+    image: grafana/grafana:10.2.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - go_network
+    depends_on:
+      - prometheus
+
+volumes:
+  caddy_data:
+  caddy_config:
+  grafana_data:

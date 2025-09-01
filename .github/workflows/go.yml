@@ -1,0 +1,130 @@
+name: Go CI/CD
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  release:
+    types: [created]  # 支持手动触发Release
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    name: 构建与测试
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ["1.24"]
+        # os: [ubuntu-latest, macos-latest, windows-latest]  # 跨平台构建矩阵
+        os: [macos-latest]
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true  # 自动启用Go模块缓存
+
+      - name: 验证模块
+        run: |
+          go mod verify
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: 安装开发工具
+        run: make deps
+
+      - name: 代码格式化检查
+        run: make fmt-check
+
+      - name: 代码静态检查（宽松模式）
+        run: make lint
+
+      - name: 运行测试（含竞态检测）
+        run: make test
+
+      - name: 跨平台构建
+        run: make cross-build
+        env:
+          GOFLAGS: -mod=readonly
+          MAKE_ECHO: echo
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: cross-build-artifacts-${{ matrix.os }}
+          path: |
+            dist/**
+          retention-days: 4  # 保留4天
+
+  release:
+    name: 发布管理
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
+    steps:
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: 检查下载的文件
+        run: |
+          echo "==== 最终文件列表 ===="
+          find dist/ -type f -exec ls -lh {} \;
+          echo "======================"
+
+      - name: 整理构建产物
+        run: |
+          # 清理不需要的目录结构
+          mkdir -p dist/final
+          find dist/ -type f -name "go_admin-*" -exec cp {} dist/final/ \;
+          
+          echo "==== 整理后的文件列表 ===="
+          ls -lh dist/final/
+          echo "文件数量：$(ls -l dist/final/ | wc -l)"
+          echo "========================="
+
+      - name: 生成语义化版本号
+        id: version
+        run: |
+          # 基于构建编号生成版本号（格式：主版本.构建号/100）
+          # 主版本可通过环境变量设置，默认1.x版本
+          MAJOR_VERSION=1
+          
+          # 正确计算版本号
+          MAJOR=$((MAJOR_VERSION + ${{ github.run_number }} / 100))
+          MINOR=$(( ${{ github.run_number }} % 100 ))
+          VERSION="${MAJOR}.$(printf "%.2d" ${MINOR})"
+          
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "生成版本号：${VERSION}"
+
+      - name: 创建GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release v${{ env.VERSION }}
+          files: |
+            dist/final/*
+          draft: false
+          prerelease: ${{ github.ref_type == 'branch' }}  # 分支构建为预发布版本
+          # 确保不尝试更新不存在的资源
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 发布到Docker Hub（示例）
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # 这里可添加Docker构建与推送逻辑
+          echo "准备将跨平台二进制文件部署到生产环境..."
+          ls -lh dist/final/

@@ -1,0 +1,60 @@
+sentinel:
+  # 应用名称，用于监控和日志
+  app_name: "go-admin"
+  log:
+    enabled: false
+    usePid: false  # 文件名是否包含进程ID
+    dir: "./logs/sentinel"  # 日志目录
+    metric:
+      singleFileMaxSize: 10485760  # 单个日志文件最大10MB (10*1024*1024)
+      maxFileCount: 7             # 保留7个日志文件（必须>0）
+      flushIntervalSec: 60        # 每60秒刷新一次日志
+      httpAddr: ":8719"
+      httpPath: "/metric"
+  # 全局熔断配置
+  global_circuit_breaker:
+    enabled: true
+    retry_timeout_ms: 5000  # 熔断恢复超时时间(毫秒)
+    min_request_amount: 10  # 最小请求数
+    stat_interval_ms: 5000  # 统计窗口时间(毫秒)
+  # API资源配置
+  resources:
+    - name: "global_default"
+      path: "*"  # 通配符路径
+      enabled: true # 是否启用限流熔断
+      flow_rule:  # 限流规则
+        enabled: true # 是否启用限流
+        threshold: 100  # 限流阈值(QPS)
+        control_behavior: reject  # 控制行为: reject(拒绝)、throttle(匀速排队)
+      circuit_breaker_rule: # 熔断规则
+        enabled: true  # 是否启用熔断
+        strategy: error_ratio # 熔断策略: slow_request_ratio(慢调用比例)、error_ratio(错误比例)、error_count(错误数)
+        error_ratio_threshold: 0.5  # 错误比例阈值
+        min_request_amount: 10  # 最小请求数
+    - name: "api_hello"  # 资源名称，对应API路径
+      path: "/api/hello"  # API路径
+      enabled: true  # 是否启用限流熔断
+      flow_rule:
+        enabled: true  # 是否启用限流
+        threshold: 200  # 限流阈值(QPS)
+        control_behavior: reject  # 控制行为: reject(拒绝)、throttle(匀速排队)
+        max_queueing_time_ms: 500  # 最大排队时间(毫秒，仅在throttle模式下有效)
+      circuit_breaker_rule:
+        enabled: true  # 是否启用熔断
+        strategy: slow_request_ratio  # 熔断策略: slow_request_ratio(慢调用比例)、error_ratio(错误比例)、error_count(错误数)
+        slow_rt_threshold: 500  # 慢调用响应时间阈值(毫秒)
+        error_ratio_threshold: 0.5  # 错误比例阈值
+        max_allowed_rt_ms: 1000  # 最大允许响应时间(毫秒)
+    - name: "api_login"
+      path: "/api/login"
+      enabled: true
+      flow_rule:
+        enabled: true
+        threshold: 200
+        control_behavior: throttle
+        max_queueing_time_ms: 1000
+      circuit_breaker_rule:
+        enabled: true
+        strategy: error_ratio
+        error_ratio_threshold: 0.3
+        min_request_amount: 20

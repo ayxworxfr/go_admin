@@ -1,0 +1,76 @@
+# 定义配置片段，禁用 HTTP 到 HTTPS 的自动重定向
+(without_redirects) {
+	@http {
+		protocol http
+	}
+	handle @http {
+		reverse_proxy {hostport}
+	}
+}
+
+# 同时监听 HTTP 和 HTTPS
+goadmin.com {
+	import without_redirects
+
+	# 使用内部自签名证书
+	tls internal
+
+	# 日志配置
+	log {
+		output file /var/log/caddy/access.log
+		format json
+	}
+
+	# 健康检查端点
+	handle_path /health {
+		respond 200 "OK"
+	}
+
+	# 静态文件服务
+	handle_path /static/* {
+		root * /app/static
+		file_server
+	}
+
+	# API请求负载均衡
+	handle /api/* {
+		reverse_proxy app1:8888 app2:8888 {
+			lb_policy least_conn
+		}
+	}
+
+	# 其他请求负载均衡
+	handle {
+		reverse_proxy app1:8888 app2:8888 {
+			lb_policy round_robin
+			# 移除不必要的头信息
+			header_up X-Real-IP {remote}
+		}
+	}
+}
+
+# HTTP 端口配置
+:80 {
+	handle_path /health {
+		respond 200 "OK"
+	}
+
+	reverse_proxy app1:8888 app2:8888 {
+		lb_policy round_robin
+	}
+}
+
+# 单独暴露 metrics 端口（例如 9090）
+:9090 {
+	# 仅允许内部访问 metrics（可选，增强安全性）
+	@internal {
+		remote_ip 172.18.0.0/16  # 允许 Docker 内网访问
+	}
+	handle @internal {
+		# 直接使用全局配置的 /metrics 端点
+		metrics /metrics
+	}
+	handle {
+		respond 403 "Forbidden"
+	}
+}
