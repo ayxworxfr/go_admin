@@ -60,9 +60,7 @@ CREATE TABLE IF NOT EXISTS `user_role` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_user_role` (`user_id`, `role_id`),
     KEY `idx_user_id` (`user_id`),
-    KEY `idx_role_id` (`role_id`),
-    FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`role_id`) REFERENCES `role`(`id`) ON DELETE CASCADE
+    KEY `idx_role_id` (`role_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户角色关联表';
 
 -- 角色权限关联表
@@ -74,9 +72,7 @@ CREATE TABLE IF NOT EXISTS `role_permission` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_role_permission` (`role_id`, `permission_id`),
     KEY `idx_role_id` (`role_id`),
-    KEY `idx_permission_id` (`permission_id`),
-    FOREIGN KEY (`role_id`) REFERENCES `role`(`id`) ON DELETE CASCADE,
-    FOREIGN KEY (`permission_id`) REFERENCES `permission`(`id`) ON DELETE CASCADE
+    KEY `idx_permission_id` (`permission_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色权限关联表';
 
 -- 系统设置表
@@ -95,5 +91,3 @@ CREATE TABLE IF NOT EXISTS `system_setting` (
     KEY `idx_category_key` (`category`, `key`),
     KEY `idx_type` (`type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统配置表';
-
-

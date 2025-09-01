@@ -149,8 +149,8 @@ Git
 
 ### 1. 克隆项目
 ```bash
-git clone https://github.com/your-username/go-admin-scaffold.git
-cd go-admin-scaffold
+git clone https://github.com/ayxworxfr/go_admin.git
+cd go_admin
 ```
 
 ### 2. 初始化数据库
@@ -183,21 +183,21 @@ go mod tidy
 go run cmd/main.go
 ```
 
-访问地址：http://localhost:8080
+访问地址：http://localhost:8888
 
 默认管理员账号：
 - 用户名：admin
-- 密码：admin123
+- 密码：123456
 
 ### 5. API测试
 ```bash
 # 登录获取token
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://localhost:8888/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d '{"username":"admin","password":"123456"}'
 
 # 使用token访问用户列表
-curl -X GET http://localhost:8080/api/user \
+curl -X GET http://localhost:8888/api/user \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -218,16 +218,16 @@ docker-compose down
 ### 单独使用 Docker
 ```bash
 # 构建镜像
-docker build -t go-admin-scaffold .
+docker build -t go_admin .
 
 # 运行容器
 docker run -d \
   --name go-admin \
-  -p 8080:8080 \
+  -p 8888:8888 \
   -e DB_HOST=your-mysql-host \
   -e DB_USER=your-mysql-user \
   -e DB_PASSWORD=your-mysql-password \
-  go-admin-scaffold
+  go_admin
 ```
 
 ## 开发指南
@@ -279,8 +279,8 @@ go run tools/generator.go -model=User -table=user
 ## 支持与反馈
 
 - 📖 [开发文档](development-guide.md)
-- 🐛 [问题反馈](https://github.com/your-username/go-admin-scaffold/issues)
-- 💬 [讨论区](https://github.com/your-username/go-admin-scaffold/discussions)
+- 🐛 [问题反馈](https://github.com/ayxworxfr/go_admin/issues)
+- 💬 [讨论区](https://github.com/ayxworxfr/go_admin/discussions)
 - ⭐ 如果这个项目对你有帮助，请给个 Star！
 
 ---

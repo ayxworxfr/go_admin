@@ -4,6 +4,9 @@ FROM golang:1.24-alpine AS builder
 # 安装 make 和其他必要工具
 RUN apk add --no-cache make git
 
+# 优先使用国内代理，失败时回源（direct）
+ENV GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct
+
 WORKDIR /app
 COPY go.mod go.sum Makefile ./
 RUN go mod download && make deps

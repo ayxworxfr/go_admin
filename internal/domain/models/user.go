@@ -14,7 +14,6 @@ type User struct {
 	Email         string    `xorm:"varchar(100) notnull unique 'email'" json:"email"`
 	Phone         string    `xorm:"varchar(20) 'phone'" json:"phone"`
 	AvatarURL     string    `xorm:"varchar(255) 'avatar_url'" json:"avatar_url"`
-	DepartmentID  uint64    `xorm:"int 'department_id'" json:"department_id"`
 	Status        int       `xorm:"int 'status'" json:"status"`
 	CreateTime    time.Time `xorm:"created" json:"create_time"`
 	UpdateTime    time.Time `xorm:"updated" json:"update_time"`

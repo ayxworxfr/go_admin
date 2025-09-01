@@ -4,8 +4,8 @@ server:
 database:
   host: mysql               # Docker容器名称
   port: 3306
-  user: admin
-  password: admin123456
+  user: go_user
+  password: go_user123
   dbname: go_admin
   max_idle_conns: 10
   max_open_conns: 100
