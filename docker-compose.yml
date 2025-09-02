@@ -106,30 +106,30 @@ services:
   # ----------------------
   # 应用服务
   # ----------------------
-  app:
-    # image: go_admin-app:latest
-    build: . # 基于当前目录的 Dockerfile 构建
-    ports:
-      - "8888:8888" # 应用服务端口映射
-    volumes:
-      - ./conf:/app/conf # 挂载配置目录
-      - ./conf/config_docker.yaml:/app/conf/config.yaml # 使用Docker专用配置
-      # - ./internal/handler:/app/internal/handler  # 挂载 handler 目录(注册路由)
-      - ./logs:/app/logs # 挂载日志目录
-    environment:
-      - TZ=Asia/Shanghai
-      - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317 # ✅ 指向 Collector 容器内端口
-      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
-      - OTEL_METRICS_EXPORTER=otlp
-      - OTEL_TRACES_EXPORTER=otlp
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8888/api/hello" ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    depends_on:
-      - mysql # 依赖 MySQL 启动
-      - redis # 依赖 Redis 启动
-      - otel-collector # 依赖 Collector 启动
-    networks:
-      - go_network # 加入自定义网络
+  # app:
+  #   # image: go_admin-app:latest
+  #   build: . # 基于当前目录的 Dockerfile 构建
+  #   ports:
+  #     - "8888:8888" # 应用服务端口映射
+  #   volumes:
+  #     - ./conf:/app/conf # 挂载配置目录
+  #     - ./conf/config_docker.yaml:/app/conf/config.yaml # 使用Docker专用配置
+  #     # - ./internal/handler:/app/internal/handler  # 挂载 handler 目录(注册路由)
+  #     - ./logs:/app/logs # 挂载日志目录
+  #   environment:
+  #     - TZ=Asia/Shanghai
+  #     - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317 # ✅ 指向 Collector 容器内端口
+  #     - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+  #     - OTEL_METRICS_EXPORTER=otlp
+  #     - OTEL_TRACES_EXPORTER=otlp
+  #   healthcheck:
+  #     test: [ "CMD", "curl", "-f", "http://localhost:8888/api/hello" ]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  #   depends_on:
+  #     - mysql # 依赖 MySQL 启动
+  #     - redis # 依赖 Redis 启动
+  #     - otel-collector # 依赖 Collector 启动
+  #   networks:
+  #     - go_network # 加入自定义网络

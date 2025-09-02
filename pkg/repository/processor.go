@@ -108,21 +108,21 @@ func (p *XormProcessor) UpdateByOption(ctx context.Context, model any, opts *Que
 
 // DeleteByOption 根据查询选项删除记录
 func (p *XormProcessor) DeleteByOption(ctx context.Context, model any, opts *QueryOption) error {
-	session := p.engine.Context(ctx)
-	defer session.Close()
+	_, err := p.ExecuteInTransaction(ctx, func(session *xorm.Session) (any, error) {
+		// 应用过滤条件
+		for _, filter := range opts.Filters {
+			session = applyCondition(session, filter) // 复用之前的条件应用函数
+		}
 
-	// 应用过滤条件
-	for _, filter := range opts.Filters {
-		session = applyCondition(session, filter) // 复用之前的条件应用函数
-	}
+		// 应用排序（可选，删除场景可能不需要排序）
+		if opts.OrderBy != "" {
+			session = session.OrderBy(opts.OrderBy)
+		}
 
-	// 应用排序（可选，删除场景可能不需要排序）
-	if opts.OrderBy != "" {
-		session = session.OrderBy(opts.OrderBy)
-	}
-
-	// 执行删除（Xorm的Delete方法会根据模型类型生成表名）
-	_, err := session.Delete(model)
+		// 执行删除（Xorm的Delete方法会根据模型类型生成表名）
+		_, err := session.Delete(model)
+		return nil, err
+	})
 	return err
 }
 
