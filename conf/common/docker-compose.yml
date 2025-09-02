@@ -17,7 +17,8 @@ services:
     networks:
       - go_network
     volumes:
-      - ../conf:/app/conf              # 挂载配置目录
+      - ../../conf:/app/conf              # 挂载配置目录
+      - ../config_docker.yaml:/app/conf/config.yaml # 使用Docker专用配置
       - ./logs/app1:/app/logs          # 挂载日志目录
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888/api/hello"]
@@ -39,7 +40,8 @@ services:
       - OTEL_METRICS_EXPORTER=otlp
       - OTEL_TRACES_EXPORTER=otlp
     volumes:
-      - ../conf:/app/conf              # 挂载配置目录
+      - ../../conf:/app/conf              # 挂载配置目录
+      - ../config_docker.yaml:/app/conf/config.yaml # 使用Docker专用配置
       - ./logs/app2:/app/logs          # 挂载日志目录
     networks:
       - go_network
@@ -79,6 +81,50 @@ services:
       - TZ=Asia/Shanghai
     depends_on:
       - jaeger
+
+  # ----------------------
+  # 数据库服务
+  # ----------------------
+  mysql:
+    image: mysql:8.0.36 # 固定版本号，避免自动更新导致兼容性问题
+    container_name: go_mysql
+    restart: unless-stopped # 非手动停止时自动重启
+    ports:
+      - "3306:3306"
+    environment:
+      - TZ=Asia/Shanghai # 时区配置（覆盖容器默认时区）
+      - LANG=C.UTF-8
+      - MYSQL_ROOT_PASSWORD=123456 # root用户密码（生产环境建议用.env文件管理）
+      - MYSQL_DATABASE=go_admin # 初始化时自动创建的数据库
+      - MYSQL_USER=go_user # 自定义普通用户（避免与root冲突）
+      - MYSQL_PASSWORD=go_user123 # 普通用户密码
+      - MYSQL_ROOT_HOST=% # 允许root远程连接（生产环境建议限制IP）
+    volumes:
+      - mysql_data:/var/lib/mysql # 数据持久化卷（防止容器删除丢失数据）
+      - ../../mysql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql # 表结构初始化（按序号执行）
+      - ../../mysql/init_data.sql:/docker-entrypoint-initdb.d/02-init-data.sql # 初始数据（按序号执行）
+      - ../../mysql/init_user.sql:/docker-entrypoint-initdb.d/03-init_user.sql # 初始化 go_user（自定义权限）
+      - ../../conf/common/mysql.cnf:/etc/mysql/conf.d/custom.cnf:ro # 自定义配置（只读权限更安全）
+    command:
+      # 数据库启动参数（优先级高于配置文件）
+      - '--character-set-server=utf8mb4' # 全局字符集（支持emoji和多语言）
+      - '--collation-server=utf8mb4_unicode_ci' # 全局排序规则（多语言友好）
+      - '--sql-mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' # 严格模式+完整规则
+    healthcheck:
+      # 安全的健康检查配置
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "--password=${MYSQL_ROOT_PASSWORD}" ] # 用环境变量传密码，避免明文
+      interval: 10s # 每10秒检查一次
+      timeout: 5s # 检查超时时间
+      retries: 5 # 连续5次失败视为不健康
+      start_period: 30s # 启动后30秒内不检查（给足初始化时间）
+    networks:
+      - go_network # 加入自定义网络，与其他服务隔离通信
+    deploy:
+      # 资源限制（避免占用过多宿主机资源）
+      resources:
+        limits:
+          cpus: '1' # 最多使用1核CPU
+          memory: 1G # 最多使用1GB内存
 
   # Caddy负载均衡器
   caddy:
@@ -127,3 +173,5 @@ volumes:
   caddy_data:
   caddy_config:
   grafana_data:
+  mysql_data:
+    driver: local
