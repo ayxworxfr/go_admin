@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ayxworxfr/go_admin/internal/config"
+	"github.com/ayxworxfr/go_admin/internal/platform/config"
 	"github.com/ayxworxfr/go_admin/pkg/jwtauth"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
 	"github.com/ayxworxfr/go_admin/pkg/utils"

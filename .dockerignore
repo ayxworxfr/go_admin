@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+build/
+dist/
+*.exe
+*.exe~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test outputs
+coverage.out
+coverage.html
+test-results.xml
+
+# Logs
+logs/
+*.log
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Vendor
+vendor/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/

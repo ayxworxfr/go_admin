@@ -914,7 +914,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"123456\"\r\n}",
+					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"admin123\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -953,7 +953,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"123456\"\r\n}",
+					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"admin123\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -1149,7 +1149,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"id\": 1,\r\n    \"username\": \"admin\",\r\n    \"password\": \"123456\",\r\n    \"email\": \"test@example.com\"\r\n}",
+					"raw": "{\r\n    \"id\": 1,\r\n    \"username\": \"admin\",\r\n    \"password\": \"admin123\",\r\n    \"email\": \"test@example.com\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -1176,7 +1176,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "{{go_admin_address}}/api/protected/user?username=admin",
+					"raw": "{{go_admin_address}}/api/protected/user?id=1",
 					"host": [
 						"{{go_admin_address}}"
 					],

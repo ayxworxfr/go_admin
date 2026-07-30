@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 var Instance *JWT
@@ -134,6 +135,7 @@ func (j *JWT) GenerateToken(userID, username, roleKey string) (*TokenPair, error
 		RoleKey:  roleKey,
 		Type:     AccessTokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(), // jti，供 TokenStore 按需撤销
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(j.tokenExpiration)),
 		},
 	}
@@ -150,6 +152,7 @@ func (j *JWT) GenerateToken(userID, username, roleKey string) (*TokenPair, error
 		RoleKey:  roleKey,
 		Type:     RefreshTokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(j.refreshTokenExpiration)),
 		},
 	}

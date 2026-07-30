@@ -30,12 +30,15 @@ RUN apk update && apk add --no-cache curl tzdata \
 
 # 创建非 root 用户和配置目录
 RUN addgroup -S app && adduser -S app -G app
-RUN mkdir -p /app/conf /app/logs \
-    && chown -R app:app /app/logs  # 递归设置目录及子文件权限
-USER app
+RUN mkdir -p /app/conf /app/logs
 
-# 复制二进制文件
+# 复制二进制文件和配置
 COPY --from=builder /app/build/go_admin /app/
+COPY --from=builder /app/conf /app/conf
+# 将 Docker 配置设为默认配置
+RUN cp /app/conf/config_docker.yaml /app/conf/config.yaml \
+    && chown -R app:app /app/logs /app/conf
+USER app
 
 # 定义默认端口
 ENV APP_PORT=8888

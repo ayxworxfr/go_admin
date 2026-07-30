@@ -8,13 +8,17 @@ import (
 	"syscall"
 	"time"
 
-	myapp "github.com/ayxworxfr/go_admin/internal/app"
-	"github.com/ayxworxfr/go_admin/internal/config"
-	"github.com/ayxworxfr/go_admin/internal/cron"
-	"github.com/ayxworxfr/go_admin/internal/dao"
-	"github.com/ayxworxfr/go_admin/internal/middleware"
-	"github.com/ayxworxfr/go_admin/internal/middleware/sentinel"
-	"github.com/ayxworxfr/go_admin/internal/service"
+	"github.com/ayxworxfr/go_admin/internal/bootstrap"
+	iamhandler "github.com/ayxworxfr/go_admin/internal/modules/iam/handler"
+	sshandler "github.com/ayxworxfr/go_admin/internal/modules/systemsetting/handler"
+	userhandler "github.com/ayxworxfr/go_admin/internal/modules/user/handler"
+	myapp "github.com/ayxworxfr/go_admin/internal/platform/app"
+	"github.com/ayxworxfr/go_admin/internal/platform/config"
+	platformcron "github.com/ayxworxfr/go_admin/internal/platform/cron"
+	"github.com/ayxworxfr/go_admin/internal/platform/db"
+	"github.com/ayxworxfr/go_admin/internal/platform/middleware"
+	"github.com/ayxworxfr/go_admin/internal/platform/middleware/sentinel"
+	"github.com/ayxworxfr/go_admin/pkg/crypter"
 	"github.com/ayxworxfr/go_admin/pkg/jwtauth"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
 	"github.com/ayxworxfr/go_admin/pkg/utils"
@@ -25,17 +29,30 @@ import (
 
 func main() {
 	cfg := InitConfig()
-	app := myapp.NewApp(cfg)
-	ctx := context.Background()
-	// 初始化日志系统
 	if err := InitLogger(cfg.Logger); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
+	jwt, err := jwtauth.NewJWT(cfg.JWT.Secret, cfg.JWT.AccessTokenExp, cfg.JWT.RefreshTokenExp)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize JWT: %v", err))
+	}
+	jwtauth.Init(jwt) // pkg/context.Context.GetUserID() 仍依赖这个全局实例
+
+	engine, err := db.NewEngine(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize database engine: %v", err))
+	}
+
+	container := bootstrap.NewContainer(engine, crypter.NewArgon2Hasher(), jwt)
+
+	app := myapp.NewApp(cfg)
+	ctx := context.Background()
+
 	app.RegisterInit(func() error {
 		configPath := utils.GetAbsPath("conf/sentinel.yaml")
-		if err := initService(app); err != nil {
-			return errors.Wrap(err, "Failed to initialize service")
+		if err := initCronTask(app); err != nil {
+			return errors.Wrap(err, "Failed to initialize cron task")
 		}
 		// 异步初始化，加快启动速度
 		go func() error {
@@ -43,7 +60,6 @@ func main() {
 				logger.Errorf(ctx, "Failed to initialize sentinel: %v", err)
 				return errors.Wrap(err, "Failed to initialize sentinel")
 			}
-			// 初始化OpenTelemetry
 			if err := initOpenTelemetry(ctx, cfg.OpenTelemetry, app); err != nil {
 				logger.Errorf(ctx, "Failed to initialize OpenTelemetry: %v", err)
 				return errors.Wrap(err, "Failed to initialize OpenTelemetry")
@@ -53,7 +69,7 @@ func main() {
 		return nil
 	})
 
-	// 添加中间件
+	// 中间件（装饰器链，顺序即执行顺序，本次不改动）
 	app.Use(middleware.CorsMiddleware())
 	app.Use(sentinel.SentinelMiddleware())
 	app.Use(middleware.GlobalErrorHandlerMiddleware())
@@ -61,14 +77,27 @@ func main() {
 	app.Use(middleware.TraceContextMiddleware())
 	app.Use(middleware.BindAndValidateMiddleware())
 
-	// 注册路由
-	app.SetupRoutes()
+	setupRoutes(app, container)
 
-	// 启动服务器
 	go startServer(app)
-
-	// 优雅关闭
 	gracefulShutdown(app)
+}
+
+// setupRoutes 用 Container 里装配好的服务构造各模块 Handler，再一次性交给
+// App.SetupRoutes 挂载路由。这是本次重构里唯一"知道所有模块存在"的地方之一
+// （另一个是 Container 本身），符合组合根的定义。
+func setupRoutes(app *myapp.App, c *bootstrap.Container) {
+	authHandler := iamhandler.NewAuthHandler(c.Auth, c.JWT)
+	jwtMiddleware := middleware.NewJWTMiddleware(c.JWT, c.Checker, c.TokenStore)
+
+	userHandler := userhandler.NewHandler(c.User, c.UserRole, c.Checker, c.JWT)
+	roleHandler := iamhandler.NewRoleHandler(c.Role, c.Checker)
+	permissionHandler := iamhandler.NewPermissionHandler(c.Permission, c.Checker)
+	userRoleHandler := iamhandler.NewUserRoleHandler(c.UserRole, c.Checker)
+	systemSettingHandler := sshandler.NewHandler(c.SystemSetting)
+
+	app.SetupRoutes(authHandler, jwtMiddleware,
+		userHandler, roleHandler, permissionHandler, userRoleHandler, systemSettingHandler)
 }
 
 func initOpenTelemetry(ctx context.Context, cfg config.OpenTelemetryConfig, app *myapp.App) error {
@@ -76,39 +105,29 @@ func initOpenTelemetry(ctx context.Context, cfg config.OpenTelemetryConfig, app 
 	if err != nil {
 		logger.Errorf(ctx, "Failed to initialize OpenTelemetry: %v", err)
 	}
-	exitFun := func() error {
-		if cfg.Enable {
+	app.RegisterExit(func() error {
+		if cfg.Enable && otelProvider != nil {
 			if err := otelProvider.Shutdown(ctx); err != nil {
 				logger.Errorf(ctx, "Failed to shutdown OpenTelemetry provider: %v", err)
 				return err
 			}
 		}
 		return nil
-	}
-	app.RegisterExit(exitFun)
+	})
 	return nil
 }
 
 func InitConfig() *config.Config {
-	// 加载配置
 	configPath := utils.GetAbsPath("conf/config.yaml")
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to load config: %v", err))
 	}
-
-	// 初始化JWT
-	if jwt, err := jwtauth.NewJWT(cfg.JWT.Secret, cfg.JWT.AccessTokenExp, cfg.JWT.RefreshTokenExp); err != nil {
-		panic(fmt.Sprintf("Failed to initialize JWT: %v", err))
-	} else {
-		jwtauth.Init(jwt)
-	}
 	return cfg
 }
 
 func InitLogger(cfg config.LoggerConfig) error {
-	// 初始化日志系统
-	loggerConfig := logger.Config{
+	logger.InitLogger(logger.Config{
 		LogFile:    cfg.LogFile,
 		Level:      cfg.Level,
 		MaxSize:    cfg.MaxSize,
@@ -116,24 +135,13 @@ func InitLogger(cfg config.LoggerConfig) error {
 		MaxAge:     cfg.MaxAge,
 		Compress:   cfg.Compress,
 		Console:    cfg.Console,
-	}
-	logger.InitLogger(loggerConfig)
+	})
 	return nil
 }
 
-func initService(app *myapp.App) error {
+func initCronTask(app *myapp.App) error {
 	var result *multierror.Error
-
-	// 初始化数据库
-	if err := dao.InitRepo(); err != nil {
-		result = multierror.Append(result, err)
-	}
-	// 初始Service层
-	if err := service.Init(); err != nil {
-		result = multierror.Append(result, err)
-	}
-
-	if taskManager, err := cron.InitCronTask(); err != nil {
+	if taskManager, err := platformcron.InitCronTask(); err != nil {
 		result = multierror.Append(result, err)
 	} else {
 		app.RegisterExit(func() error {
@@ -141,7 +149,6 @@ func initService(app *myapp.App) error {
 			return nil
 		})
 	}
-
 	return result.ErrorOrNil()
 }
 
@@ -152,18 +159,13 @@ func startServer(app *myapp.App) {
 }
 
 func gracefulShutdown(app *myapp.App) {
-	// 创建一个通道来接收操作系统的信号
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	// 阻塞，直到接收到退出信号
 	<-quit
 	logger.Info(context.Background(), "Shutting down server...")
 
-	// 设置关闭超时时间
 	const shutdownTimeout = 3 * time.Second
-
-	// 调用 GracefulShutdown
 	app.GracefulShutdown(shutdownTimeout)
 
 	logger.Info(context.Background(), "Server exiting")

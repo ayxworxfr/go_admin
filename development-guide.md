@@ -1,67 +1,47 @@
 # 模块代码开发指南
 
+## 权威来源
+
+架构规则（模块边界、依赖注入、设计模式选型、SOLID 自检、仓储/DTO/测试规范）的**唯一权威来源**是 [`.cursor/skills/developing-go-admin-modules/SKILL.md`](.cursor/skills/developing-go-admin-modules/SKILL.md)。无论是人工开发还是加载 AI 辅助编码，都应先读这份文档；本文件只保留与"怎么协作"相关的流程性内容，不重复架构细节。
+
 ## 开发要求
 
 ### 框架
-- go, hertz, xorm
+- Go 1.24+、Hertz、Xorm、MySQL 8.0+
 
-### 参考资料
-通过以下目录理解项目编码风格：
-1. dao层使用封装好的API
-2. pkg/repository
-3. internal/handler
-4. internal/service
-5. internal/domain
+### 新增/修改代码前必读
+1. [`developing-go-admin-modules/SKILL.md`](.cursor/skills/developing-go-admin-modules/SKILL.md) —— 判断该新建模块还是加进现有模块、跨模块依赖怎么设计、该不该抽接口
+2. `mysql/schema.sql` —— 了解当前数据库表结构
+3. 现有同类模块的实现（如新增功能与用户管理类似，直接参考 `internal/modules/user/`；与权限相关，参考 `internal/modules/iam/`）
 
 ### 核心任务
-1. 检查domain目录是否有定义
-2. 编写internal目录下这个新模块的handler和service
-3. handler和service直接参考 Role 模块的实现方式
+1. 按 SKILL.md §3.1（新增模块）或 §3.2（现有模块加功能）确定改动范围
+2. 编写 `internal/modules/<mod>/` 下的 model/dto/service/handler（仓储在 service 包内 unexported 构造，默认不单独开 `internal/repository` 子包）
+3. 在 `internal/bootstrap/container.go` 装配依赖，在 `cmd/main.go` 挂载路由
+4. 涉及新表/新字段时同步更新 `mysql/schema.sql` 与 `mysql/init_data.sql`
 
 ## 开发流程
-1. 阅读 mysql 目录下的数据库结构
-2. 分析业务逻辑并设计功能方案
+1. 阅读 `mysql/schema.sql` 理解现有数据库结构
+2. 分析业务逻辑并设计功能方案（跨模块依赖、是否需要新接口，对照 SKILL.md §3.3/§3.4）
 3. 提交功能设计方案供讨论
-4. 获得批准后开始编码
+4. 获得批准后开始编码，完成后对照 SKILL.md §5 的输出骨架自检
 
 ## 编码标准
-- 遵循项目现有代码风格
-- 确保新功能与现有系统集成
-- 遇到疑问及时讨论
+- 遵循项目现有代码风格与目录结构
+- 确保新功能与现有系统集成，不引入循环依赖
+- 遇到疑问及时讨论，不要在架构边界不清楚的情况下先写代码
 
 ## 设计理念
 
-### 1. Don't Repeat Yourself (DRY)
-- 避免代码重复,提取共用功能
-- 使用继承、组合复用代码
+以下十条是通用软件工程原则，本项目在此基础上如何具体落地（哪些该抽接口、哪些不该抽、什么时候该拆分 Service），详见 SKILL.md 及其 `references/` 目录，这里不重复展开。
 
-### 2. 单一责任原则
-- 每个类或模块只负责一项职责
-
-### 3. 开放/封闭原则
-- 对扩展开放,对修改封闭
-- 使用抽象接口和继承实现可扩展性
-
-### 4. 依赖倒置原则
-- 依赖于抽象而非具体实现
-- 使用依赖注入管理模块间依赖
-
-### 5. KISS原则 (Keep It Simple, Stupid)
-- 保持代码简单明了
-- 避免过度设计
-
-### 6. YAGNI原则 (You Ain't Gonna Need It)
-- 只实现当前需要的功能
-
-### 7. 关注点分离
-- 将不同功能关注点分离到不同模块
-
-### 8. 代码可测试性
-- 设计时考虑单元测试便利性
-
-### 9. 错误处理和日志记录
-- 统一的错误处理机制
-- 适当的日志记录
-
-### 10. 性能考虑
-- 设计阶段考虑潜在性能问题
+1. **DRY**：避免代码重复，通过组合（持有字段 + 委托调用）复用行为，而非继承/embedding
+2. **单一职责**：一个 Service 只负责一类变更原因的逻辑；无状态管理台 CRUD 与有状态的高频判断逻辑要分开
+3. **开放/封闭**：已知会替换的实现（算法、存储后端）抽接口，未知是否会替换的不抽
+4. **依赖倒置**：依赖通过构造函数注入，不读全局变量；跨模块依赖窄接口，不依赖具体类型
+5. **KISS**：没有第二个真实实现前不抽接口，没有真实的多状态迁移前不上状态模式
+6. **YAGNI**：只实现当前需要的功能，"未来可能需要"不是抽象的理由
+7. **关注点分离**：模块边界即限界上下文边界，用 Go `internal` 可见性在编译期强制
+8. **可测试性**：Service 层依赖通过接口注入，便于单测替换；集成测试用 `-short` 区分是否需要真实数据库
+9. **错误处理与日志**：统一用 `github.com/pkg/errors` 包装错误并保留调用栈，关键路径用 `pkg/logger` 记录结构化日志
+10. **性能考虑**：区分低频管理台操作与高频请求路径，只在真正的热路径上引入缓存等复杂度

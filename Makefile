@@ -4,13 +4,15 @@
 PROJECT_NAME := go_admin
 BINARY_NAME := $(PROJECT_NAME)
 VERSION := 0.1.0
-BUILD := $(shell git rev-parse --short HEAD)
+BUILD := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 MAIN := cmd/main.go
 
 # ==============================
 # 路径与平台配置
 # ==============================
-BUILD_DIR := "build"
+# 注意：BUILD_DIR 不能写成 "build"（引号会进变量值），也不能把目录本身
+# 做成与 phony 目标同名的 make target，否则会变成 build: build 循环依赖。
+BUILD_DIR := build
 DIST_DIR := dist
 PLATFORMS := windows/amd64 windows/386 darwin/amd64 linux/amd64 linux/386
 
@@ -19,21 +21,21 @@ PLATFORMS := windows/amd64 windows/386 darwin/amd64 linux/amd64 linux/386
 # ==============================
 TEST_FLAGS := -short -cover -race -count=1
 
-# 平台检测
+# 平台检测（二进制后缀 / race 等）；文件操作用下方统一的 POSIX 命令。
+# Windows 请用 Git Bash / MSYS 跑 make（本文件已大量依赖 for/test/[ 语法）。
 ifeq ($(OS),Windows_NT)
     DETECTED_OS := windows
     BINARY_EXT := .exe
-    RMRF := powershell -Command "Remove-Item -Recurse -Force"
-    MKDIR := mkdir
-    NULL_DEVICE := NUL
     TEST_FLAGS := -short -cover -count=1
 else
     DETECTED_OS := $(shell uname | tr '[:upper:]' '[:lower:]')
     BINARY_EXT :=
-    RMRF := rm -rf
-    MKDIR := mkdir -p
-    NULL_DEVICE := /dev/null
 endif
+
+# 统一 POSIX 文件操作，macOS / Linux / Git-Bash-on-Windows 均可
+RMRF := rm -rf
+MKDIR := mkdir -p
+NULL_DEVICE := /dev/null
 
 # Go 命令
 GO := go
@@ -62,9 +64,6 @@ GOTESTSUM := $(GOPATH)/bin/gotestsum$(BINARY_EXT)
 # ==============================
 all: help
 
-$(BUILD_DIR) $(DIST_DIR):
-	@$(MKDIR) $@
-
 # ==============================
 # 依赖管理
 # ==============================
@@ -74,7 +73,7 @@ $(DEPS_LOCK):
 	@echo "Installing dependencies..."
 	@$(GO) mod download
 	@echo "Installing development tools..."
-	@$(GO) install honnef.co/go/tools/cmd/staticcheck@latest
+	@$(GO) install honnef.co/go/tools/cmd/staticcheck@v0.6.1
 	@$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.2
 	@$(GO) install gotest.tools/gotestsum@latest
 	@touch $@
@@ -134,13 +133,15 @@ test-xml: deps ## Generate JUnit format test report
 # ==============================
 # 构建目标
 # ==============================
-build: $(BUILD_DIR) ## Build binary for current platform
+build: ## Build binary for current platform
 	@echo "Building binary for current platform..."
+	@$(MKDIR) $(BUILD_DIR)
 	@$(GO) build -o $(BINARY) -ldflags "$(LD_FLAGS)" $(MAIN)
 	@echo "Build complete: $(BINARY)"
 
-cross-build: clean $(DIST_DIR) ## Build binaries for multiple platforms
+cross-build: clean ## Build binaries for multiple platforms
 	@echo "Starting cross-platform build..."
+	@$(MKDIR) $(DIST_DIR)
 	@for platform in $(PLATFORMS); do \
 		OS=$$(echo $$platform | cut -f1 -d'/'); \
 		ARCH=$$(echo $$platform | cut -f2 -d'/'); \

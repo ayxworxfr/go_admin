@@ -11,6 +11,21 @@ import (
 	"strings"
 )
 
+// InitHybridCrypter 从环境变量指定的密钥文件初始化混合加密器，失败时直接panic（启动期快速失败）
+func InitHybridCrypter() *HybridCrypter {
+	// 从环境变量获取密钥文件路径，默认为当前目录下的crypter.key
+	keyPath := os.Getenv("CRYPTER_KEY_PATH")
+	if keyPath == "" {
+		keyPath = "crypter.key"
+	}
+
+	instance, err := NewHybridCrypter(keyPath)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize crypter: %v", err))
+	}
+	return instance
+}
+
 // HybridCrypter 混合加密器
 type HybridCrypter struct {
 	eccCrypter *ECCCrypter
