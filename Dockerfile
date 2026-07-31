@@ -3,7 +3,10 @@
 
 FROM golang:1.24-alpine AS builder
 
-RUN apk add --no-cache git ca-certificates
+# apk 默认 CDN 在国内极慢；先换阿里云再装包（BuildKit 缓存跨构建复用）
+RUN --mount=type=cache,target=/var/cache/apk \
+    sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirrors.aliyun.com/alpine#g' /etc/apk/repositories \
+    && apk add --no-cache git ca-certificates
 
 # 模块代理：国内优先；校验库走国内镜像，避免 sum.golang.org 被 RST
 ENV CGO_ENABLED=0 \
@@ -33,7 +36,9 @@ FROM alpine:3.21
 ARG TZ=Asia/Shanghai
 ENV TZ=$TZ
 
-RUN apk add --no-cache ca-certificates curl tzdata \
+RUN --mount=type=cache,target=/var/cache/apk \
+    sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirrors.aliyun.com/alpine#g' /etc/apk/repositories \
+    && apk add --no-cache ca-certificates curl tzdata \
     && ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime \
     && echo "$TZ" > /etc/timezone \
     && addgroup -S app \

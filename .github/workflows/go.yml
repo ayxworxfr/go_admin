@@ -5,7 +5,9 @@
 # Release：仅 push 语义化标签 v* 时创建 GitHub Release（附跨平台二进制）
 #
 # 发版：
-#   make release VERSION=1.2.0
+#   make bump                         # 推荐：最新正式版 patch+1 并 push
+#   make bump PART=minor
+#   make release VERSION=1.2.0        # 指定版本
 #   # 等价：git tag -a v1.2.0 -m v1.2.0 && git push origin v1.2.0
 # =============================================================================
 

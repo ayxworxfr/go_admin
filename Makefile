@@ -8,6 +8,8 @@ VERSION ?= 0.1.0
 BUILD := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 MAIN := cmd/main.go
 REMOTE ?= origin
+PART ?= patch
+FORCE ?=
 
 # ==============================
 # 路径与平台配置
@@ -67,7 +69,7 @@ GOTESTSUM := $(GOPATH)/bin/gotestsum$(BINARY_EXT)
 .PHONY: all clean build generate run test lint lint-strict fmt help version update-deps deps check \
 	docker-build docker-run docker-compose-up docker-compose-down docker-compose-logs \
 	docker-compose-restart docker-compose-rebuild docker-compose-status docker-compose-clean \
-	tag release tag-push
+	tag release tag-push bump
 
 # ==============================
 # 基础目标
@@ -180,16 +182,23 @@ run: build ## Build and run the program
 # ==============================
 # 发版（逻辑在 scripts/release-tag.sh）
 # ==============================
+#   make bump                        # 最新正式版 patch+1 并 push（日常发版）
+#   make bump PART=minor
+#   make bump PART=major
 #   make tag VERSION=1.2.0
 #   make release VERSION=1.2.0
 #   make release VERSION=1.2.0-rc.1 REMOTE=origin
+#   make release VERSION=1.2.0 FORCE=1   # 移动已有 tag 到当前 HEAD 并强推
+bump: ## Auto bump semver tag and push; usage: make bump [PART=patch|minor|major]
+	@FORCE="$(FORCE)" ./scripts/release-tag.sh bump "$(PART)" "$(REMOTE)"
+
 tag: ## Create annotated tag; usage: make tag VERSION=1.2.0
 	@test "$(origin VERSION)" = "command line" || { echo "usage: make tag VERSION=1.2.0" >&2; exit 1; }
-	@./scripts/release-tag.sh tag "$(VERSION)"
+	@FORCE="$(FORCE)" ./scripts/release-tag.sh tag "$(VERSION)"
 
 release: ## Tag and push (triggers GitHub Release); usage: make release VERSION=1.2.0
 	@test "$(origin VERSION)" = "command line" || { echo "usage: make release VERSION=1.2.0" >&2; exit 1; }
-	@./scripts/release-tag.sh release "$(VERSION)" "$(REMOTE)"
+	@FORCE="$(FORCE)" ./scripts/release-tag.sh release "$(VERSION)" "$(REMOTE)"
 
 tag-push: release ## Alias for release
 

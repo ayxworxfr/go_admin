@@ -20,6 +20,21 @@
 	}
 }
 
+# 上游只配一处主动探活：每个 reverse_proxy 块会各自打 /health，
+# 以前 /api + 默认 handle + :80 三套并行 → 日志里像「一秒一堆」。
+(app_upstream) {
+	reverse_proxy app1:8888 app2:8888 {
+		lb_policy least_conn
+		health_uri /health
+		health_interval 30s
+		health_timeout 3s
+		health_passes 2
+		health_fails 3
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
+	}
+}
+
 # 同时监听 HTTP 和 HTTPS（需 hosts 指向本机：goadmin.com）
 goadmin.com {
 	import without_redirects
@@ -28,7 +43,7 @@ goadmin.com {
 	# 使用内部自签名证书
 	tls internal
 
-	# 健康检查端点
+	# 边缘探活（不回源到 app）
 	handle_path /health {
 		respond 200 "OK"
 	}
@@ -39,26 +54,9 @@ goadmin.com {
 		file_server
 	}
 
-	# API请求负载均衡（主动探活，避免打到挂掉的实例）
-	handle /api/* {
-		reverse_proxy app1:8888 app2:8888 {
-			lb_policy least_conn
-			health_uri /health
-			health_interval 10s
-			health_timeout 3s
-		}
-	}
-
-	# 其他请求负载均衡
+	# API 与其它请求共用同一上游池（避免重复 active health）
 	handle {
-		reverse_proxy app1:8888 app2:8888 {
-			lb_policy round_robin
-			health_uri /health
-			health_interval 10s
-			health_timeout 3s
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Real-IP {remote_host}
-		}
+		import app_upstream
 	}
 }
 
@@ -70,14 +68,8 @@ goadmin.com {
 		respond 200 "OK"
 	}
 
-	reverse_proxy app1:8888 app2:8888 {
-		lb_policy round_robin
-		health_uri /health
-		health_interval 10s
-		health_timeout 3s
-		header_up X-Forwarded-For {remote_host}
-		header_up X-Real-IP {remote_host}
-	}
+	# :80 与域名站点是两套 server，仍会各自探活；间隔已拉到 30s
+	import app_upstream
 }
 
 # 单独暴露 metrics（仅容器网段；Prometheus 在 obs/edge 内抓取）
