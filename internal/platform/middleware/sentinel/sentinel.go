@@ -13,10 +13,9 @@ import (
 	"github.com/alibaba/sentinel-golang/core/flow"
 	"github.com/alibaba/sentinel-golang/logging"
 	"github.com/ayxworxfr/go_admin/internal/platform/config"
-	mycontext "github.com/ayxworxfr/go_admin/pkg/context"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
+	"github.com/ayxworxfr/go_admin/pkg/reqctx"
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"go.uber.org/zap"
 )
 
@@ -226,8 +225,5 @@ func (mw *Sentinel) handleBlockedRequest(c *app.RequestContext, resourceName str
 	// 记录被拦截的请求
 	mw.logger.Sugar().Warnf("Request blocked for resource: %s, reason: %s", resourceName, blockErr.BlockType().String())
 
-	// 返回标准的限流响应
-	rsp := mycontext.RateLimit("Too many requests, please try again later")
-	c.JSON(consts.StatusTooManyRequests, rsp)
-	c.Abort()
+	reqctx.Abort(c, reqctx.RateLimit("Too many requests, please try again later"))
 }

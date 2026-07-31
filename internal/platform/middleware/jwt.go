@@ -5,11 +5,10 @@ import (
 	"strconv"
 	"strings"
 
-	mycontext "github.com/ayxworxfr/go_admin/pkg/context"
 	"github.com/ayxworxfr/go_admin/pkg/jwtauth"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
+	"github.com/ayxworxfr/go_admin/pkg/reqctx"
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"go.uber.org/zap"
 )
 
@@ -36,13 +35,12 @@ type PermissionConfig struct {
 
 // 默认配置
 var defaultPermissionConfig = PermissionConfig{
-	ExcludePaths: []string{"/api/login", "/api/refresh", "/api/hello"},
+	ExcludePaths: []string{"/api/login", "/api/refresh"},
 	Enable:       true,
 }
 
-// JWTAuthMiddleware 承载 JWT 认证所需的依赖。相比旧版直连
-// jwtauth.Instance / service.PermissionServiceInstance 两个全局单例，
-// 这里改为构造注入，方便测试替换与后续更换实现（如 Redis TokenStore）。
+// JWTAuthMiddleware 承载 JWT 认证所需的依赖。JWT / PermissionChecker /
+// TokenStore 均由组合根构造注入，方便测试替换与后续更换实现（如 Redis TokenStore）。
 type JWTAuthMiddleware struct {
 	jwt        *jwtauth.JWT
 	checker    PermissionChecker
@@ -62,86 +60,63 @@ func NewJWTMiddleware(jwt *jwtauth.JWT, checker PermissionChecker, tokenStore To
 // Handle 返回 Hertz 处理函数
 func (m *JWTAuthMiddleware) Handle() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
-		// 1. JWT验证
 		tokenString := c.Request.Header.Get("Authorization")
 		if tokenString == "" {
-			rsp := mycontext.Unauthorized("No token provided")
-			c.JSON(consts.StatusUnauthorized, rsp)
-			c.Abort()
+			reqctx.Abort(c, reqctx.Unauthorized("No token provided"))
 			return
 		}
-
-		// 移除 "Bearer " 前缀
 		if len(tokenString) > 7 && tokenString[:7] == "Bearer " {
 			tokenString = tokenString[7:]
 		}
 
 		claims, err := m.jwt.ParseToken(tokenString)
 		if err != nil {
-			rsp := mycontext.Unauthorized("Invalid token: " + err.Error())
-			c.JSON(consts.StatusUnauthorized, rsp)
-			c.Abort()
+			reqctx.Abort(c, reqctx.Unauthorized("Invalid token: "+err.Error()))
 			return
 		}
 
-		// 2. Token撤销检查：jti 为空（异常场景）时直接放行，避免误判下线
+		// Token撤销检查：jti 为空（异常场景）时直接放行，避免误判下线
 		if claims.ID != "" {
 			revoked, err := m.tokenStore.IsRevoked(ctx, claims.ID)
 			if err != nil {
 				logger.Error(ctx, "Failed to check token revocation", zap.Error(err))
-				rsp := mycontext.Unauthorized("Token check error")
-				c.JSON(consts.StatusUnauthorized, rsp)
-				c.Abort()
+				reqctx.Abort(c, reqctx.Unauthorized("Token check error"))
 				return
 			}
 			if revoked {
-				rsp := mycontext.Unauthorized("Token has been revoked")
-				c.JSON(consts.StatusUnauthorized, rsp)
-				c.Abort()
+				reqctx.Abort(c, reqctx.Unauthorized("Token has been revoked"))
 				return
 			}
 		}
 
-		// 3. 提取用户信息
-		userIDStr := claims.Identity
-		userID, err := strconv.ParseUint(userIDStr, 10, 64)
+		userID, err := strconv.ParseUint(claims.Identity, 10, 64)
 		if err != nil {
-			rsp := mycontext.Unauthorized("Invalid user ID in token")
-			c.JSON(consts.StatusUnauthorized, rsp)
-			c.Abort()
+			reqctx.Abort(c, reqctx.Unauthorized("Invalid user ID in token"))
 			return
 		}
 		c.Set(jwtauth.ClaimsKey, claims)
 
-		// 4. 权限验证（如果启用）
 		if m.config.Enable {
 			requestMethod := string(c.Request.Method())
 			requestPath := string(c.Request.URI().Path())
 			methodPath := requestMethod + ":" + requestPath
 
-			// 检查是否在排除列表中
 			if isExcludedPath(methodPath, m.config.ExcludePaths) {
 				c.Next(ctx)
 				return
 			}
 
-			// 检查用户是否有权限访问此路径
 			hasPermission, err := m.checker.HasPermission(ctx, userID, requestMethod, requestPath)
 			if err != nil {
 				logger.Error(ctx, "Failed to check permission", zap.Error(err),
 					zap.Uint64("user_id", userID), zap.String("method", requestMethod), zap.String("path", requestPath))
-				rsp := mycontext.Unauthorized("Permission check error")
-				c.JSON(consts.StatusUnauthorized, rsp)
-				c.Abort()
+				reqctx.Abort(c, reqctx.InternalError("Permission check error"))
 				return
 			}
-
 			if !hasPermission {
 				logger.Warn(ctx, "Permission denied",
 					zap.Uint64("user_id", userID), zap.String("method", requestMethod), zap.String("path", requestPath))
-				rsp := mycontext.Unauthorized("Permission denied")
-				c.JSON(consts.StatusUnauthorized, rsp)
-				c.Abort()
+				reqctx.Abort(c, reqctx.Forbidden("Permission denied"))
 				return
 			}
 		}

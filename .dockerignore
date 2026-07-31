@@ -1,39 +1,36 @@
-# Git
+# Git / IDE / 本地状态
 .git
 .gitignore
+.cursor
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+.make_deps_installed
 
-# Build artifacts
+# 构建产物与测试输出
 build/
 dist/
 *.exe
 *.exe~
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Test outputs
 coverage.out
 coverage.html
 test-results.xml
-
-# Logs
 logs/
 *.log
 
-# Docker
-Dockerfile
-.dockerignore
+# 与镜像无关的仓库内容（缩小 build context）
+docs/
+mysql/
+*.md
+DOCKER.md
 docker-compose.yml
-
-# Vendor
-vendor/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# CI/CD
+docker-compose*.yml
+Makefile
 .github/
+
+# 测试与工具缓存
+**/testdata/
+vendor/

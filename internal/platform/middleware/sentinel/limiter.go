@@ -9,7 +9,7 @@ import (
 
 	"github.com/ayxworxfr/go_admin/pkg/logger"
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"

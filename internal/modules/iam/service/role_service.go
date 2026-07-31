@@ -20,17 +20,17 @@ import (
 // 那两类关注点的变更频率、性能敏感度都完全不同，混在一起正是旧版本
 // 膨胀到 960 行的根因。
 type RoleService struct {
-	roleRepo       pkgrepo.Repository[model.Role]
-	permissionRepo pkgrepo.Repository[model.Permission]
-	rolePermRepo   pkgrepo.Repository[model.RolePermission]
+	roleRepo       *pkgrepo.Repository[model.Role]
+	permissionRepo *pkgrepo.Repository[model.Permission]
+	rolePermRepo   *pkgrepo.Repository[model.RolePermission]
 }
 
 // NewRoleService 创建角色服务。之所以在这里而不是在 bootstrap 里调用
-// newRepositories(processor)，是因为 repositories 是 service 包内的
-// unexported 类型，Container 只能传 processor 进来，没有办法绕过 Service
+// newRepositories(db)，是因为 repositories 是 service 包内的
+// unexported 类型，Container 只能传 *DB 进来，没有办法绕过 Service
 // 直连仓储（见 repositories.go 的封装说明）。
-func NewRoleService(processor pkgrepo.ORMProcessor) *RoleService {
-	repos := newRepositories(processor)
+func NewRoleService(db *pkgrepo.DB) *RoleService {
+	repos := newRepositories(db)
 	return &RoleService{
 		roleRepo:       repos.role,
 		permissionRepo: repos.permission,
@@ -47,32 +47,32 @@ func (s *RoleService) CreateRole(ctx context.Context, req *dto.CreateRoleRequest
 
 	var result dto.RoleResponse
 	var permissionResponses []*dto.PermissionResponse
-	_, err := s.roleRepo.Transaction(ctx, func(txCtx context.Context) (any, error) {
+	err := s.roleRepo.Transaction(ctx, func(txCtx context.Context) error {
 		if err := s.roleRepo.Create(txCtx, &role); err != nil {
 			logger.Error(txCtx, "Failed to create role", zap.Error(err))
-			return nil, errors.Wrap(err, "failed to create role")
+			return errors.Wrap(err, "failed to create role")
 		}
 
 		if len(req.PermissionIDs) > 0 {
 			if err := s.AssignRolePermissions(txCtx, role.ID, req.PermissionIDs); err != nil {
 				logger.Error(txCtx, "Failed to assign permissions to role", zap.Error(err), zap.Uint64("role_id", role.ID))
-				return nil, errors.Wrap(err, "failed to assign permissions to role")
+				return errors.Wrap(err, "failed to assign permissions to role")
 			}
 		}
 
 		if err := copier.Copy(&result, &role); err != nil {
-			return nil, errors.Wrap(err, "failed to copy role to result")
+			return errors.Wrap(err, "failed to copy role to result")
 		}
 
 		permissions, err := s.RetrievePermissionByRoleID(txCtx, role.ID)
 		if err != nil {
 			logger.Error(txCtx, "Failed to retrieve role permissions", zap.Error(err), zap.Uint64("role_id", role.ID))
-			return nil, errors.Wrap(err, "failed to retrieve role permissions")
+			return errors.Wrap(err, "failed to retrieve role permissions")
 		}
 		if err := copier.Copy(&permissionResponses, &permissions); err != nil {
-			return nil, errors.Wrap(err, "failed to copy permissions to response")
+			return errors.Wrap(err, "failed to copy permissions to response")
 		}
-		return nil, nil
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -140,16 +140,15 @@ func (s *RoleService) DeleteRole(ctx context.Context, id uint64) error {
 		return errors.Wrap(err, "failed to retrieve role")
 	}
 
-	_, err := s.roleRepo.Transaction(ctx, func(txCtx context.Context) (any, error) {
+	return s.roleRepo.Transaction(ctx, func(txCtx context.Context) error {
 		if err := s.rolePermRepo.QueryBuilder().Eq("role_id", id).Delete(txCtx); err != nil {
-			return nil, errors.Wrap(err, "failed to delete role permissions")
+			return errors.Wrap(err, "failed to delete role permissions")
 		}
 		if err := s.roleRepo.DeleteByID(txCtx, id); err != nil {
-			return nil, errors.Wrap(err, "failed to delete role")
+			return errors.Wrap(err, "failed to delete role")
 		}
-		return nil, nil
+		return nil
 	})
-	return err
 }
 
 // GetRole 获取单个角色（附带权限列表）
@@ -234,10 +233,10 @@ func (s *RoleService) AssignRolePermissions(ctx context.Context, roleID uint64, 
 	toRemoveIDs := lo.Filter(existingIDs, func(id uint64, _ int) bool { return !lo.Contains(permissionIDs, id) })
 	toAddIDs := lo.Filter(permissionIDs, func(id uint64, _ int) bool { return !lo.Contains(existingIDs, id) })
 
-	_, err = s.rolePermRepo.Transaction(ctx, func(txCtx context.Context) (any, error) {
+	return s.rolePermRepo.Transaction(ctx, func(txCtx context.Context) error {
 		if len(toRemoveIDs) > 0 {
 			if err := s.rolePermRepo.QueryBuilder().Eq("role_id", roleID).In("permission_id", toRemoveIDs).Delete(txCtx); err != nil {
-				return nil, errors.Wrap(err, "failed to delete role permissions")
+				return errors.Wrap(err, "failed to delete role permissions")
 			}
 		}
 		if len(toAddIDs) > 0 {
@@ -245,12 +244,11 @@ func (s *RoleService) AssignRolePermissions(ctx context.Context, roleID uint64, 
 				return model.RolePermission{RoleID: roleID, PermissionID: permissionID}
 			})
 			if err := s.rolePermRepo.BatchCreate(txCtx, rolePermissions); err != nil {
-				return nil, errors.Wrap(err, "failed to create role permissions")
+				return errors.Wrap(err, "failed to create role permissions")
 			}
 		}
-		return nil, nil
+		return nil
 	})
-	return err
 }
 
 // RetrievePermissionByRoleID 通过角色 ID 查询关联权限，是 RoleService 对外

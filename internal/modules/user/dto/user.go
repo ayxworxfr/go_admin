@@ -9,11 +9,11 @@ import (
 // CreateUserRequest 创建用户请求
 type CreateUserRequest struct {
 	Username  string   `json:"username" vd:"len($)>0&&len($)<50"`
-	Password  string   `json:"password" vd:"len($)>=6&&len($)<20"`
+	Password  string   `json:"password" vd:"len($)>=6&&len($)<20"` // 明文；Service 落库前哈希为 PasswordHash
 	Email     string   `json:"email" vd:"len($)>0&&len($)<100"`
 	Phone     string   `json:"phone" vd:"len($)<20"`
 	AvatarURL string   `json:"avatar_url" vd:"len($)<255"`
-	RoleIDs   []uint64 `json:"role_ids" vd:"len($)>0"` // 至少关联一个角色，创建后由 handler 编排调用 iam 分配
+	RoleIDs   []uint64 `json:"role_ids" vd:"len($)>0" msg:"role_ids is required and must be non-empty"` // 至少关联一个角色，创建后由 handler 编排调用 iam 分配
 	Status    int      `json:"status"`
 }
 
@@ -21,7 +21,7 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	ID        uint64    `json:"id" vd:"$>0"`
 	Username  string    `json:"username" vd:"len($)>=0&&len($)<50"`
-	Password  string    `json:"password" vd:"len($)>=0||(len($)>=6&&len($)<20)"` // 允许不修改密码
+	Password  string    `json:"password" vd:"len($)>=0||(len($)>=6&&len($)<20)"` // 明文；空串表示不修改 PasswordHash
 	Email     string    `json:"email" vd:"len($)>=0&&len($)<100"`
 	Phone     string    `json:"phone" vd:"len($)<20"`
 	AvatarURL string    `json:"avatar_url" vd:"len($)<255"`
@@ -34,9 +34,10 @@ type DeleteUserRequest struct {
 	IDs []uint64 `json:"ids" vd:"len($)>0"`
 }
 
-// GetUserRequest 获取用户请求
+// GetUserRequest 获取单个用户：id 与 username 二选一（都传时优先 id）
 type GetUserRequest struct {
-	ID uint64 `query:"id" vd:"$>0"`
+	ID       uint64 `query:"id"`
+	Username string `query:"username" vd:"len($)>=0&&len($)<50"`
 }
 
 // GetUserListRequest 获取用户列表请求

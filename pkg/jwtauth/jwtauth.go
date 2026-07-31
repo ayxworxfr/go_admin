@@ -7,25 +7,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
-
-var Instance *JWT
 
 const (
 	// AccessTokenType 表示 Access Token 类型
 	AccessTokenType = "access"
 	// RefreshTokenType 表示 Refresh Token 类型
 	RefreshTokenType = "refresh"
-	// ClaimsKey 表示 JWT 载荷的键名
+	// ClaimsKey 表示 JWT 载荷的键名，由鉴权中间件写入 RequestContext
 	ClaimsKey = "jwt_claims"
 )
-
-func Init(jwt *JWT) {
-	Instance = jwt
-}
 
 // Claims 定义 JWT 载荷结构
 type Claims struct {
@@ -206,78 +199,9 @@ func (j *JWT) RefreshToken(refreshTokenStr string) (*TokenPair, error) {
 	return j.GenerateToken(claims.Identity, claims.Nice, claims.RoleKey)
 }
 
-// ContextClaims 从上下文中提取 JWT 声明
-func (j *JWT) ContextClaims(c *app.RequestContext) (*Claims, error) {
-	claims, exists := c.Get(ClaimsKey)
-	if !exists {
-		return nil, errors.New("jwt claims not found in context")
-	}
-
-	return claims.(*Claims), nil
-}
-
-// UserInfo 从上下文中获取用户信息
+// UserInfo 从上下文中获取的用户信息
 type UserInfo struct {
 	UserID   string
 	Username string
 	RoleKey  string
-}
-
-// ExtractUserInfo 从上下文中提取用户信息
-func (j *JWT) ExtractUserInfo(c *app.RequestContext) (*UserInfo, error) {
-	claims, err := j.ContextClaims(c)
-	if err != nil {
-		return nil, err
-	}
-
-	return &UserInfo{
-		UserID:   claims.Identity,
-		Username: claims.Nice,
-		RoleKey:  claims.RoleKey,
-	}, nil
-}
-
-// GetUserID 获取用户ID
-func (j *JWT) GetUserID(c *app.RequestContext) (string, error) {
-	claims, err := j.ContextClaims(c)
-	if err != nil {
-		return "", err
-	}
-	return claims.Identity, nil
-}
-
-// GetUserIDInt64 获取用户ID（int64类型）
-func (j *JWT) GetUserIDInt64(c *app.RequestContext) (int64, error) {
-	userID, err := j.GetUserID(c)
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseInt(userID, 10, 64)
-}
-
-// GetUserIDUint64 获取用户ID（uint64类型）
-func (j *JWT) GetUserIDUint64(c *app.RequestContext) (uint64, error) {
-	userID, err := j.GetUserID(c)
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseUint(userID, 10, 64)
-}
-
-// GetUsername 获取用户名
-func (j *JWT) GetUsername(c *app.RequestContext) (string, error) {
-	claims, err := j.ContextClaims(c)
-	if err != nil {
-		return "", err
-	}
-	return claims.Nice, nil
-}
-
-// GetRoleKey 获取角色标识
-func (j *JWT) GetRoleKey(c *app.RequestContext) (string, error) {
-	claims, err := j.ContextClaims(c)
-	if err != nil {
-		return "", err
-	}
-	return claims.RoleKey, nil
 }

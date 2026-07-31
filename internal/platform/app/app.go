@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/ayxworxfr/go_admin/internal/platform/config"
-	validator "github.com/ayxworxfr/go_admin/internal/platform/validate"
 	"github.com/ayxworxfr/go_admin/internal/platform/router"
+	validator "github.com/ayxworxfr/go_admin/internal/platform/validate"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
 	"github.com/cloudwego/hertz/pkg/app/server"
 	hertztracing "github.com/hertz-contrib/obs-opentelemetry/tracing"

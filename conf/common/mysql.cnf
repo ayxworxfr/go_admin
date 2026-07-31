@@ -1,37 +1,27 @@
+# MySQL 8 自定义配置（由 compose entrypoint 以 0644 拷入 conf.d，避免 WSL 挂载 0777 被忽略）
 [mysqld]
-# 基本配置
 character-set-server=utf8mb4
 collation-server=utf8mb4_unicode_ci
-default-time-zone='+8:00'
+default-time-zone='+08:00'
 
-# 连接配置
-max_connections=1000
+max_connections=500
 max_connect_errors=10000
 
-# 缓存配置
 innodb_buffer_pool_size=256M
-query_cache_size=0
-query_cache_type=0
-
-# 日志配置
-log-error=/var/log/mysql/error.log
-slow_query_log=1
-slow_query_log_file=/var/log/mysql/slow.log
-long_query_time=2
-
-# InnoDB配置
 innodb_file_per_table=1
 innodb_flush_log_at_trx_commit=2
 innodb_log_buffer_size=8M
-innodb_log_file_size=128M
 
-# 二进制日志
+# 慢查询打到数据目录，避免依赖不存在的 /var/log/mysql
+slow_query_log=1
+slow_query_log_file=/var/lib/mysql/slow.log
+long_query_time=2
+
 log-bin=mysql-bin
 binlog_format=ROW
-expire_logs_days=7
+binlog_expire_logs_seconds=604800
 
-# SQL模式
-sql_mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO
+sql_mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
 
 [client]
 default-character-set=utf8mb4

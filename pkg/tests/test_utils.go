@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/ayxworxfr/go_admin/internal/platform/config"
-	"github.com/ayxworxfr/go_admin/pkg/jwtauth"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
 	"github.com/ayxworxfr/go_admin/pkg/utils"
 )
@@ -28,13 +27,6 @@ func InitConfig() *config.Config {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to load config: %v", err))
-	}
-
-	// 初始化JWT
-	if jwt, err := jwtauth.NewJWT(cfg.JWT.Secret, cfg.JWT.AccessTokenExp, cfg.JWT.RefreshTokenExp); err != nil {
-		panic(fmt.Sprintf("Failed to initialize JWT: %v", err))
-	} else {
-		jwtauth.Init(jwt)
 	}
 	return cfg
 }

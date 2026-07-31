@@ -4,10 +4,9 @@ import (
 	"context"
 	"runtime/debug"
 
-	mycontext "github.com/ayxworxfr/go_admin/pkg/context"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
+	"github.com/ayxworxfr/go_admin/pkg/reqctx"
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"go.uber.org/zap"
 )
 
@@ -27,10 +26,7 @@ func GlobalErrorHandlerMiddleware() app.HandlerFunc {
 					zap.String("stack", string(stack)),
 				)
 
-				// 返回统一的错误响应
-				rsp := mycontext.InternalError()
-				c.JSON(consts.StatusInternalServerError, rsp)
-				c.Abort()
+				reqctx.Abort(c, reqctx.InternalError())
 			}
 		}()
 

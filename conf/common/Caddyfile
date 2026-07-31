@@ -1,3 +1,15 @@
+# 访问日志片段：localhost(:80) 与域名站点共用，否则只有 goadmin.com 会写文件
+(access_log) {
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50mb
+			roll_keep 5
+			roll_keep_for 168h
+		}
+		format json
+	}
+}
+
 # 定义配置片段，禁用 HTTP 到 HTTPS 的自动重定向
 (without_redirects) {
 	@http {
@@ -8,18 +20,13 @@
 	}
 }
 
-# 同时监听 HTTP 和 HTTPS
+# 同时监听 HTTP 和 HTTPS（需 hosts 指向本机：goadmin.com）
 goadmin.com {
 	import without_redirects
+	import access_log
 
 	# 使用内部自签名证书
 	tls internal
-
-	# 日志配置
-	log {
-		output file /var/log/caddy/access.log
-		format json
-	}
 
 	# 健康检查端点
 	handle_path /health {
@@ -32,10 +39,13 @@ goadmin.com {
 		file_server
 	}
 
-	# API请求负载均衡
+	# API请求负载均衡（主动探活，避免打到挂掉的实例）
 	handle /api/* {
 		reverse_proxy app1:8888 app2:8888 {
 			lb_policy least_conn
+			health_uri /health
+			health_interval 10s
+			health_timeout 3s
 		}
 	}
 
@@ -43,31 +53,39 @@ goadmin.com {
 	handle {
 		reverse_proxy app1:8888 app2:8888 {
 			lb_policy round_robin
-			# 移除不必要的头信息
-			header_up X-Real-IP {remote}
+			health_uri /health
+			health_interval 10s
+			health_timeout 3s
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Real-IP {remote_host}
 		}
 	}
 }
 
-# HTTP 端口配置
+# HTTP 端口配置（本机 curl http://localhost/... 走这里）
 :80 {
+	import access_log
+
 	handle_path /health {
 		respond 200 "OK"
 	}
 
 	reverse_proxy app1:8888 app2:8888 {
 		lb_policy round_robin
+		health_uri /health
+		health_interval 10s
+		health_timeout 3s
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
 	}
 }
 
-# 单独暴露 metrics 端口（例如 9090）
+# 单独暴露 metrics（仅容器网段；Prometheus 在 obs/edge 内抓取）
 :9090 {
-	# 仅允许内部访问 metrics（可选，增强安全性）
 	@internal {
-		remote_ip 172.18.0.0/16  # 允许 Docker 内网访问
+		remote_ip 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
 	}
 	handle @internal {
-		# 直接使用全局配置的 /metrics 端点
 		metrics /metrics
 	}
 	handle {

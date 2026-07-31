@@ -162,7 +162,7 @@ func TestJWT_RefreshToken(t *testing.T) {
 	assert.Equal(t, roleKey, refreshedAccessClaims.RoleKey)
 }
 
-func TestJWT_ContextClaims(t *testing.T) {
+func TestClaimsFromContext(t *testing.T) {
 	jwtManager, err := NewJWT("test-secret-key", "24h", "30d")
 	assert.NoError(t, err)
 
@@ -177,13 +177,12 @@ func TestJWT_ContextClaims(t *testing.T) {
 	ctx := app.NewContext(1)
 	ctx.Set(ClaimsKey, claims)
 
-	// 测试提取claims
-	extractedClaims, err := jwtManager.ContextClaims(ctx)
+	extractedClaims, err := ClaimsFromContext(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, claims, extractedClaims)
 }
 
-func TestJWT_ExtractUserInfo(t *testing.T) {
+func TestUserInfoFromContext(t *testing.T) {
 	jwtManager, err := NewJWT("test-secret-key", "24h", "30d")
 	assert.NoError(t, err)
 
@@ -198,8 +197,7 @@ func TestJWT_ExtractUserInfo(t *testing.T) {
 	ctx := app.NewContext(1)
 	ctx.Set(ClaimsKey, claims)
 
-	// 测试提取用户信息
-	userInfo, err := jwtManager.ExtractUserInfo(ctx)
+	userInfo, err := UserInfoFromContext(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, userID, userInfo.UserID)
 	assert.Equal(t, username, userInfo.Username)

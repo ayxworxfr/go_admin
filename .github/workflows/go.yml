@@ -1,130 +1,120 @@
-name: Go CI/CD
+# =============================================================================
+# go_admin CI / Release
+# =============================================================================
+# CI：PR 与 main/master 推送 → 校验、lint、测试、跨平台构建
+# Release：仅 push 语义化标签 v* 时创建 GitHub Release（附跨平台二进制）
+#
+# 发版：
+#   make release VERSION=1.2.0
+#   # 等价：git tag -a v1.2.0 -m v1.2.0 && git push origin v1.2.0
+# =============================================================================
+
+
+name: Go CI
 
 on:
   push:
     branches: [main, master]
+    tags: ["v*"]
   pull_request:
     branches: [main, master]
-  release:
-    types: [created]  # 支持手动触发Release
+  workflow_dispatch:
 
+# 默认只读；release job 单独提权
 permissions:
-  contents: write
-  packages: write
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    name: 构建与测试
+  ci:
+    name: Build & Test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ["1.24"]
-        # os: [ubuntu-latest, macos-latest, windows-latest]  # 跨平台构建矩阵
-        os: [macos-latest]
     steps:
-      - name: 检出代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 设置 Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-          cache: true  # 自动启用Go模块缓存
+          go-version-file: go.mod
+          cache: true
 
-      - name: 验证模块
+      - name: Verify modules
         run: |
           go mod verify
           go mod tidy
           git diff --exit-code go.mod go.sum
 
-      - name: 安装开发工具
+      - name: Install tooling
         run: make deps
 
-      - name: 代码格式化检查
+      - name: Format check
         run: make fmt-check
 
-      - name: 代码静态检查（宽松模式）
+      - name: Lint
         run: make lint
 
-      - name: 运行测试（含竞态检测）
+      - name: Test
         run: make test
 
-      - name: 跨平台构建
+      # GOOS/GOARCH 交叉编译即可，无需 macos/windows runner
+      - name: Cross-build
         run: make cross-build
         env:
           GOFLAGS: -mod=readonly
-          MAKE_ECHO: echo
 
-      - name: 上传构建产物
+      - name: Upload binaries
         uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/main'
         with:
-          name: cross-build-artifacts-${{ matrix.os }}
-          path: |
-            dist/**
-          retention-days: 4  # 保留4天
+          name: go_admin-binaries
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
 
   release:
-    name: 发布管理
-    needs: build
+    name: GitHub Release
+    needs: ci
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    if: github.ref_type == 'tag' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
+    permissions:
+      contents: write
     steps:
-      - name: 下载所有构建产物
+      - name: Download binaries
         uses: actions/download-artifact@v4
         with:
+          name: go_admin-binaries
           path: dist/
 
-      - name: 检查下载的文件
+      - name: Collect release assets
+        id: assets
         run: |
-          echo "==== 最终文件列表 ===="
-          find dist/ -type f -exec ls -lh {} \;
-          echo "======================"
-
-      - name: 整理构建产物
-        run: |
-          # 清理不需要的目录结构
+          set -euo pipefail
           mkdir -p dist/final
-          find dist/ -type f -name "go_admin-*" -exec cp {} dist/final/ \;
-          
-          echo "==== 整理后的文件列表 ===="
+          # 只收跨平台产物，避免把目录噪声打进 Release
+          find dist -type f \( -name 'go_admin-*' -o -name 'go_admin-*.exe' \) -print0 \
+            | while IFS= read -r -d '' f; do
+                cp -f "$f" dist/final/
+              done
+          count="$(find dist/final -type f | wc -l | tr -d ' ')"
+          echo "asset count=${count}"
           ls -lh dist/final/
-          echo "文件数量：$(ls -l dist/final/ | wc -l)"
-          echo "========================="
+          if [ "${count}" -lt 1 ]; then
+            echo "no release binaries found under dist/" >&2
+            exit 1
+          fi
 
-      - name: 生成语义化版本号
-        id: version
-        run: |
-          # 基于构建编号生成版本号（格式：主版本.构建号/100）
-          # 主版本可通过环境变量设置，默认1.x版本
-          MAJOR_VERSION=1
-          
-          # 正确计算版本号
-          MAJOR=$((MAJOR_VERSION + ${{ github.run_number }} / 100))
-          MINOR=$(( ${{ github.run_number }} % 100 ))
-          VERSION="${MAJOR}.$(printf "%.2d" ${MINOR})"
-          
-          echo "VERSION=${VERSION}" >> $GITHUB_ENV
-          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
-          echo "生成版本号：${VERSION}"
-
-      - name: 创建GitHub Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: Release v${{ env.VERSION }}
-          files: |
-            dist/final/*
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: dist/final/*
           draft: false
-          prerelease: ${{ github.ref_type == 'branch' }}  # 分支构建为预发布版本
-          # 确保不尝试更新不存在的资源
+          prerelease: ${{ contains(github.ref_name, '-') }}
           fail_on_unmatched_files: true
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 发布到Docker Hub（示例）
-        if: github.ref == 'refs/heads/main'
-        run: |
-          # 这里可添加Docker构建与推送逻辑
-          echo "准备将跨平台二进制文件部署到生产环境..."
-          ls -lh dist/final/

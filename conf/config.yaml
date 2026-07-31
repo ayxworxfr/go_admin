@@ -12,10 +12,23 @@ database:
     conn_max_lifetime: 3600  # 1 hour in seconds
     show_sql: false
 
+# Redis 连接（jwt.token_store.driver=redis 时需要；也可被限流等复用）
+redis:
+    host: 127.0.0.1
+    port: 6379
+    password: ""
+    db: 0
+    pool_size: 10
+    min_idle_conns: 2
+
 jwt:
     secret: your_jwt_secret_key
     access_token_exp: 8h
     refresh_token_exp: 7d
+    # 登出撤销名单：memory=单机；redis=多实例共享（读上方 redis 配置）
+    token_store:
+        driver: memory
+        key_prefix: "go_admin:jwt:revoked:"
 
 logger:
     log_file: "./logs/app.log"
@@ -28,9 +41,9 @@ logger:
 
 opentelemetry:
     enable: true         # 启用OpenTelemetry
-    service: go-admin   # 服务名称
-    endpoint: 127.0.0.1:43170 # Jaeger地址
-    protocol: grpc # Jaeger协议
+    service: go-admin   # Jaeger UI 里选这个服务名
+    endpoint: 127.0.0.1:43170 # 本机 → docker-compose 映射的 otel-collector:4317
+    protocol: grpc
     sampling: 1.0  # 开发环境建议全采样
     timeout: 5           # 超时时间5秒
 

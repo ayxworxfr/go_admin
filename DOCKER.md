@@ -1,205 +1,242 @@
 # Docker 部署指南
 
-本项目提供了完整的 Docker 环境，包含 MySQL、Redis、Jaeger 追踪系统等基础服务和应用本身。
+两套编排二选一，**不要同时启动**（会抢 3306 / 6379 等端口）：
 
-## 🚀 快速启动
+| 编排 | 文件 | 场景 |
+|------|------|------|
+| 单实例 | 根目录 `docker-compose.yml` + `.env` | 开发联调 / 小生产 |
+| 多实例 HA | `conf/common/docker-compose.yml` + `conf/common/.env` | Caddy 负载均衡 + 双 app + 监控 |
 
-### 1. 启动基础服务
+配置目录说明见 [conf/README.md](conf/README.md)。
+
+---
+
+## 一、单实例（推荐入门）
+
+### 1. 准备密钥（首次）
+
 ```bash
-# 方式一：使用 Makefile (推荐)
+cp .env.example .env
+# 按需修改 MYSQL_*、JWT_SECRET
+# 应用通过 DATABASE_* / JWT_SECRET 注入，不以 config_docker.yaml 明文为准
+```
+
+### 2. 启动
+
+```bash
+# Makefile
 make docker-compose-up
 
-# 方式二：直接使用 docker-compose
-docker-compose up --build -d
+# 或
+docker compose up --build -d
 ```
 
-> **说明**: 默认启动 MySQL、Redis、Jaeger 等基础服务，应用服务需要手动启用。
+> **构建**：`go mod download` → `go run ./cmd/routegen` → `go build`。需要 BuildKit。
 
-### 2. 查看服务状态
+### 3. 状态 / 日志 / 停止
+
 ```bash
-# 查看所有服务状态
 make docker-compose-status
-
-# 查看日志
 make docker-compose-logs
-```
-
-### 3. 启用应用服务 (可选)
-```bash
-# 1. 编辑 docker-compose.yml，取消 app 服务的注释
-# 2. 重新启动服务
-make docker-compose-rebuild
-```
-
-### 4. 停止服务
-```bash
 make docker-compose-down
 ```
 
-## 📋 服务列表
+### 服务与端口
 
-| 服务名 | 容器名 | 端口 | 描述 |
-|--------|--------|------|------|
-| app | go_admin_scaffold_app | 8888 | Go Admin 脚手架应用 |
-| mysql | go_mysql | 3306 | MySQL 8.0 数据库 |
-| redis | go_redis | 6379 | Redis 7 缓存 |
-| jaeger | jaeger | 16686 | Jaeger UI 追踪系统 |
-| otel-collector | otel-collector | 4317/4318 | OpenTelemetry 收集器 |
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| app | `${APP_PORT:-8888}` | Go Admin API |
+| mysql | 3306 | MySQL 8.0（`go_mysql`） |
+| redis | 6379 | Redis 7（`go_redis`） |
+| jaeger | 16686 | Jaeger UI（看链路） |
+| jaeger | 4317 / 4318 | OTLP（容器内 / 可选直连） |
+| otel-collector | 43170→4317 | 本机应用 OTLP gRPC |
+| otel-collector | 43180→4318 | OTLP HTTP **上报**（`POST /v1/traces`，不是网页） |
 
-> **注意**: 应用服务(app)默认已注释，如需启用请取消 docker-compose.yml 中的注释。
+### 环境变量（`.env`）
 
-## 🔧 配置说明
+| 变量 | 默认 | 作用 |
+|------|------|------|
+| `APP_PORT` | `8888` | 监听端口；与映射、healthcheck 同步 |
+| `MYSQL_ROOT_PASSWORD` | `123456` | MySQL root |
+| `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` | `go_user` / `go_user123` / `go_admin` | 业务库；映射为 app 的 `DATABASE_*` |
+| `JWT_SECRET` | （必填） | JWT 签名密钥 |
+| `REDIS_PASSWORD` | 空 | Redis 密码 |
+| `INSTANCE_ID` | `app` | OTEL service 名 |
 
-### 数据库配置
-- **主机**: mysql (容器内网络)
-- **端口**: 3306
-- **数据库**: go_admin
-- **用户名**: go_user
-- **密码**: go_user123
-- **Root密码**: 123456
-
-### Redis配置
-- **主机**: redis (容器内网络)
-- **端口**: 6379
-- **密码**: 无
-
-### 配置文件
-- `conf/config_docker.yaml`: Docker 环境专用配置
-- `conf/common/mysql.cnf`: MySQL 自定义配置
-- `conf/common/redis.conf`: Redis 自定义配置
-- `conf/common/otel-collector-config.yaml`: OpenTelemetry 配置
-- `conf/common/prometheus.yml`: Prometheus 配置
-- `conf/common/sentinel.yaml`: Sentinel 配置
-
-## 🌐 访问地址
-
-启动成功后，可以访问以下地址：
-
-- **Jaeger UI**: http://localhost:16686
-- **MySQL**: localhost:3306 (go_user/go_user123)
-- **Redis**: localhost:6379
-
-> **应用服务地址** (需要启用app服务):
-> - **应用 API**: http://localhost:8888
-> - **健康检查**: http://localhost:8888/api/hello
-
-## 📝 常用命令
-
-### 开发调试
 ```bash
-# 重新构建并启动
+APP_PORT=9000 make docker-compose-up
+```
+
+### 访问地址
+
+- API: http://localhost:8888
+- 健康检查: http://localhost:8888/health
+- Jaeger UI: http://localhost:16686
+- MySQL: `localhost:3306`（账号见 `.env`）
+- Redis: `localhost:6379`
+
+默认管理员：`admin` / `admin123`（`mysql/init_data.sql`）。
+
+---
+
+## 二、多实例 HA（Caddy）
+
+```bash
+# 先停单实例
+docker compose down
+
+cp conf/common/.env.example conf/common/.env
+docker compose --env-file conf/common/.env \
+  -f conf/common/docker-compose.yml up -d --build
+```
+
+架构：`Caddy(edge)` → `app1/app2` → `MySQL/Redis(data)`；链路经 `otel-collector` → `Jaeger(obs)`。
+
+### 访问地址
+
+| 用途 | 地址 |
+|------|------|
+| API | http://localhost/api/... |
+| Caddy 探活 | http://localhost/health |
+| Jaeger UI | http://127.0.0.1:16686 |
+| Collector 探活 | http://127.0.0.1:13133/ → `{"status":"Server available",...}` |
+| Collector zpages | http://127.0.0.1:55679/debug/tracez |
+| Prometheus | http://127.0.0.1:9090 |
+| Grafana | http://127.0.0.1:3000 |
+| OTLP HTTP | `POST http://127.0.0.1:43180/v1/traces`（浏览器打开无效） |
+
+Caddy 访问日志：`conf/common/logs/caddy/access.log`（对 `:80` 产生请求后生成）。  
+应用日志：`conf/common/logs/app1`、`app2`。
+
+MySQL / Redis / Grafana / Prometheus 默认只绑 `127.0.0.1`，不对局域网暴露。
+
+---
+
+## 配置文件索引
+
+| 路径 | 用途 |
+|------|------|
+| `.env` / `.env.example` | 单实例密钥 |
+| `conf/common/.env` / `.env.example` | 多实例密钥 |
+| `conf/config_docker.yaml` | Docker 应用非密钥配置 |
+| `conf/sentinel.yaml` | Sentinel 限流 |
+| `conf/common/mysql.cnf` | MySQL 8（经 entrypoint 以 0644 安装） |
+| `conf/common/redis.conf` | Redis |
+| `conf/common/otel-collector-config.yaml` | Collector |
+| `conf/common/Caddyfile` | 负载均衡与访问日志 |
+| `conf/common/prometheus.yml` | Prometheus 抓取 |
+| `conf/common/docker-compose.yml` | HA 编排 |
+
+密钥覆盖逻辑：`internal/platform/config/env.go`（`applyEnvOverrides`）。
+
+---
+
+## 常用命令（单实例）
+
+```bash
 make docker-compose-rebuild
-
-# 查看实时日志
 make docker-compose-logs
-
-# 重启服务
 make docker-compose-restart
+docker compose ps
 
-# 查看容器状态
-docker-compose ps
+docker compose exec mysql mysql -u go_user -p"$MYSQL_PASSWORD" go_admin
+docker compose exec redis redis-cli
+docker compose logs app
+docker compose restart app
 ```
 
-### 数据库操作
-```bash
-# 进入 MySQL 容器
-docker-compose exec mysql mysql -u go_user -pgo_user123 go_admin
+## 数据持久化
 
-# 进入 Redis 容器
-docker-compose exec redis redis-cli
+- 卷：`mysql_data`、`redis_data`（HA 另有 `caddy_*`、`grafana_data`、`prometheus_data`）
+- 单实例应用日志：`./logs`
+- HA 应用 / Caddy 日志：`conf/common/logs/`
 
-# 查看 MySQL 日志
-docker-compose logs mysql
+> 改 `.env` 里的 `MYSQL_PASSWORD` **不会**自动更新已有数据卷中的账号，需 `docker compose down -v` 或手动 `ALTER USER`。
 
-# 查看 Redis 日志
-docker-compose logs redis
-```
+---
 
-### 应用调试 (需要先启用app服务)
-```bash
-# 查看应用日志
-docker-compose logs app
-
-# 进入应用容器
-docker-compose exec app sh
-
-# 重启应用服务
-docker-compose restart app
-```
-
-> **提示**: 应用服务默认已注释，启用方法：
-> 1. 编辑 `docker-compose.yml`
-> 2. 取消 app 服务的注释 (删除 `# ` 前缀)
-> 3. 重新启动: `make docker-compose-rebuild`
-
-## 🗂️ 数据持久化
-
-项目使用 Docker 卷进行数据持久化：
-
-- `mysql_data`: MySQL 数据目录
-- `redis_data`: Redis 数据目录
-- `./logs`: 应用日志目录
-
-## 🔧 故障排除
+## 故障排除
 
 ### 1. 端口冲突
-如果端口被占用，可以修改 `docker-compose.yml` 中的端口映射。
 
-### 2. 数据库初始化失败
+改 `.env` 的 `APP_PORT`，或停掉另一套编排。
+
+### 2. `go_mysql is unhealthy` / 初始化失败
+
+常见原因：
+
+- `init_user.sql` 失败（不要对 `information_schema` 做 GRANT）
+- WSL 下 `mysql.cnf` 呈 0777 被忽略（当前 compose 已用 `/tmp` + `install -m 0644`）
+
+重建数据卷：
+
 ```bash
-# 清理所有数据重新开始
+docker compose down -v
+docker compose up -d --build
+```
+
+### 3. 应用连不上库
+
+确认：
+
+1. MySQL 已 `healthy`
+2. 容器内有 `DATABASE_HOST=mysql`、`DATABASE_PASSWORD`（与 `.env` 一致）
+3. 未把密钥只写在 yaml 却忘记注入环境变量
+
+### 4. `http://localhost:43180/` 浏览器打不开
+
+正常。那是 OTLP 上报口。看链路用 Jaeger；Collector 探活用 `:13133`（HA 栈）。
+
+### 5. Caddy 目录没有日志
+
+1. 确认跑的是 HA 栈且 Caddy 已起
+2. 对 `http://localhost/health` 发过请求
+3. 查看 `conf/common/logs/caddy/access.log`（`:80` 已配置 access_log）
+
+### 6. 路由 404
+
+改过 `// @route` 后需 `docker compose up -d --build`（镜像内跑 routegen）。
+
+### 7. 查看日志
+
+```bash
+docker compose logs
+docker compose logs app
+docker compose logs mysql
+```
+
+---
+
+## 清理
+
+```bash
 make docker-compose-clean
-make docker-compose-up
+# 或
+docker compose down --volumes --rmi all
 ```
 
-### 3. 应用无法连接数据库
-检查 `conf/config_docker.yaml` 中的数据库配置是否正确。
+HA：
 
-### 4. 查看详细错误日志
 ```bash
-# 查看所有服务日志
-docker-compose logs
-
-# 查看特定服务日志
-docker-compose logs app
-docker-compose logs mysql
-docker-compose logs redis
+docker compose --env-file conf/common/.env \
+  -f conf/common/docker-compose.yml down --volumes
 ```
 
-## 🧹 清理资源
+---
+
+## API 冒烟
 
 ```bash
-# 停止并清理所有资源（包括数据卷）
-make docker-compose-clean
-
-# 或者手动清理
-docker-compose down --volumes --rmi all
-docker system prune -f
-```
-
-## 📚 API 测试
-
-> **前提条件**: 需要先启用应用服务，参考上面的应用调试部分说明。
-
-启动应用服务后，可以使用以下方式测试 API：
-
-### 1. 健康检查
-```bash
-curl http://localhost:8888/api/hello
-```
-
-### 2. 用户登录
-```bash
-curl -X POST http://localhost:8888/api/login \
+# 单实例
+curl -sS http://localhost:8888/health
+curl -sS -X POST http://localhost:8888/api/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin",
-    "password": "123456"
-  }'
-```
+  -d '{"username":"admin","password":"admin123"}'
 
-### 3. 获取用户列表（需要先登录获取 token）
-```bash
-curl -X GET http://localhost:8888/api/protected/user/list \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+# HA（经 Caddy）
+curl -sS http://localhost/health
+curl -sS -X POST http://localhost/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
 ```

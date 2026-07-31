@@ -19,19 +19,19 @@ import (
 // 替换旧版写死调用全局 crypter.Instance 的方式，换算法只需换一个实现，
 // Service 本身不用改。
 type Service struct {
-	repo   pkgrepo.Repository[model.User]
+	repo   *pkgrepo.Repository[model.User]
 	hasher crypter.PasswordHasher
 }
 
-// NewService 创建用户服务。processor 用于构造内部仓储，hasher 由 Container 统一装配。
+// NewService 创建用户服务。db 用于构造内部仓储，hasher 由 Container 统一装配。
 //
 // repo 字段直接调用 pkg/repository 的泛型构造函数生成，不再单独包一层
 // internal/repository 子包——这里没有任何自定义查询，repo 字段本身是
 // unexported，handler 拿不到 *Service 的内部字段，多一层子包只是重复
 // Go 已经免费提供的封装，不需要为一个单行包装函数多开一个包。
-func NewService(processor pkgrepo.ORMProcessor, hasher crypter.PasswordHasher) *Service {
+func NewService(db *pkgrepo.DB, hasher crypter.PasswordHasher) *Service {
 	return &Service{
-		repo:   pkgrepo.NewRepository[model.User](processor),
+		repo:   pkgrepo.NewRepository[model.User](db),
 		hasher: hasher,
 	}
 }
@@ -49,12 +49,13 @@ func (s *Service) FindByUsername(ctx context.Context, username string) (*model.U
 // VerifyPassword 实现 UserFinder：密码校验逻辑封闭在 user 模块内，
 // 调用方（iam.AuthService）只拿到 true/false，不接触哈希细节。
 func (s *Service) VerifyPassword(u *model.User, plainPassword string) bool {
-	return s.hasher.Verify(plainPassword, u.Password)
+	return s.hasher.Verify(plainPassword, u.PasswordHash)
 }
 
-// Create 创建用户（密码在此处哈希，DTO 中的明文密码不会被持久化）
+// Create 创建用户（明文密码只存在于 DTO；落库前在此哈希为 PasswordHash）
 func (s *Service) Create(ctx context.Context, req *dto.CreateUserRequest) (*model.User, error) {
 	var u model.User
+	// 字段名刻意不同：req.Password（明文）不会被 copier 拷进 u.PasswordHash（哈希）
 	if err := copier.Copy(&u, req); err != nil {
 		return nil, errors.Wrap(err, "failed to copy request to user")
 	}
@@ -63,7 +64,7 @@ func (s *Service) Create(ctx context.Context, req *dto.CreateUserRequest) (*mode
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to hash password")
 	}
-	u.Password = hashed
+	u.PasswordHash = hashed
 
 	if err := s.repo.Create(ctx, &u); err != nil {
 		logger.Error(ctx, "Failed to create user", zap.Error(err))
@@ -72,7 +73,7 @@ func (s *Service) Create(ctx context.Context, req *dto.CreateUserRequest) (*mode
 	return &u, nil
 }
 
-// Update 更新用户。密码为空表示不修改，保留原哈希。
+// Update 更新用户。密码为空表示不修改，保留原 PasswordHash。
 func (s *Service) Update(ctx context.Context, req *dto.UpdateUserRequest) (*model.User, error) {
 	u, err := s.repo.FindByID(ctx, req.ID)
 	if err != nil {
@@ -80,19 +81,17 @@ func (s *Service) Update(ctx context.Context, req *dto.UpdateUserRequest) (*mode
 		return nil, errors.Wrap(err, "failed to retrieve user")
 	}
 
-	originalPassword := u.Password
+	// copier 只按同名字段拷贝；Password ≠ PasswordHash，原哈希天然不会被明文覆盖
 	if err := copier.Copy(u, req); err != nil {
 		return nil, errors.Wrap(err, "failed to copy request to user")
 	}
 
-	if req.Password == "" {
-		u.Password = originalPassword
-	} else {
+	if req.Password != "" {
 		hashed, err := s.hasher.Hash(req.Password)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to hash password")
 		}
-		u.Password = hashed
+		u.PasswordHash = hashed
 	}
 
 	if err := s.repo.Update(ctx, u); err != nil {

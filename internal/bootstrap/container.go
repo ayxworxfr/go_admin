@@ -39,24 +39,23 @@ type Container struct {
 	TokenStore iamtokenstore.TokenStore
 }
 
-// NewContainer 按依赖顺序装配全部服务。engine/hasher/jwt 由 cmd/main.go 在
-// 加载完配置后创建并传入，Container 本身不关心它们是怎么来的。
-func NewContainer(engine *xorm.Engine, hasher crypter.PasswordHasher, jwt *jwtauth.JWT) *Container {
-	processor := repository.NewXormProcessor(engine)
+// NewContainer 按依赖顺序装配全部服务。engine/hasher/jwt/tokenStore 由 Run 在
+// 创建基础设施后传入，Container 本身不关心它们是怎么来的。
+func NewContainer(engine *xorm.Engine, hasher crypter.PasswordHasher, jwt *jwtauth.JWT, tokenStore iamtokenstore.TokenStore) *Container {
+	db := repository.New(engine)
 
-	userSvc := userservice.NewService(processor, hasher)
+	userSvc := userservice.NewService(db, hasher)
 
-	roleSvc := iamservice.NewRoleService(processor)
-	permSvc := iamservice.NewPermissionService(processor)
-	userRoleSvc := iamservice.NewUserRoleService(processor, roleSvc, userSvc)
+	roleSvc := iamservice.NewRoleService(db)
+	permSvc := iamservice.NewPermissionService(db)
+	userRoleSvc := iamservice.NewUserRoleService(db, roleSvc, userSvc)
 
 	permCache := iamcache.NewInMemoryCache(permissionCacheTTL)
 	checker := iamservice.NewPermissionChecker(userRoleSvc, roleSvc, permCache)
 
-	tokenStore := iamtokenstore.NewInMemoryTokenStore()
 	authSvc := iamservice.NewAuthService(userSvc, userRoleSvc, tokenStore, jwt)
 
-	ssSvc := ssservice.NewService(processor, userSvc)
+	ssSvc := ssservice.NewService(db, userSvc)
 
 	return &Container{
 		Engine:        engine,

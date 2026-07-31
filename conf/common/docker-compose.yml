@@ -1,173 +1,32 @@
+# =============================================================================
+# go_admin 多实例编排（生产向单机 Compose）
+# =============================================================================
+# 架构：
+#   公网入口 → Caddy(edge) → app1/app2(edge+data+obs)
+#   app → MySQL/Redis(data) ；链路 → otel-collector → Jaeger(obs)
+#   指标 → Prometheus/Grafana(obs)
+#
+# 启动（在仓库根目录）：
+#   cp conf/common/.env.example conf/common/.env   # 首次
+#   docker compose --env-file conf/common/.env \
+#     -f conf/common/docker-compose.yml up -d --build
+#
+# 设计约束：
+#   1. 密钥只进 .env，不写死在本文件
+#   2. MySQL/Redis/观测面板默认只绑 127.0.0.1，不对局域网暴露
+#   3. 网络三分：edge / data / obs，缩小横向移动面
+#   4. 上游未 healthy 前不启动 Caddy，避免对外 502
+# =============================================================================
+
+name: go_admin_ha
+
 networks:
-  go_network:
+  edge:
     driver: bridge
-
-services:
-  # 应用实例1
-  app1:
-    image: go_admin-app:latest
-    environment:
-      - PORT=8888
-      - INSTANCE_ID=app1
-      - TZ=Asia/Shanghai
-      - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317  # ✅ 指向 Collector 容器内端口
-      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
-      - OTEL_METRICS_EXPORTER=otlp
-      - OTEL_TRACES_EXPORTER=otlp
-    networks:
-      - go_network
-    volumes:
-      - ../../conf:/app/conf              # 挂载配置目录
-      - ../config_docker.yaml:/app/conf/config.yaml # 使用Docker专用配置
-      - ./logs/app1:/app/logs          # 挂载日志目录
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8888/api/hello"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    depends_on:
-      - jaeger
-
-  # 应用实例2
-  app2:
-    image: go_admin-app:latest
-    environment:
-      - PORT=8888
-      - INSTANCE_ID=app2
-      - TZ=Asia/Shanghai
-      - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317  # ✅ 指向 Collector 容器内端口
-      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
-      - OTEL_METRICS_EXPORTER=otlp
-      - OTEL_TRACES_EXPORTER=otlp
-    volumes:
-      - ../../conf:/app/conf              # 挂载配置目录
-      - ../config_docker.yaml:/app/conf/config.yaml # 使用Docker专用配置
-      - ./logs/app2:/app/logs          # 挂载日志目录
-    networks:
-      - go_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8888/api/hello"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    depends_on:
-      - jaeger
-
-  jaeger:
-    image: jaegertracing/all-in-one:1.46
-    ports:
-      - "16686:16686"  # Jaeger UI
-      - "14250:14250"  # gRPC/OTLP 端口
-      - "4317:4317"    # OTLP gRPC 端口
-      - "4318:4318"    # HTTP/OTLP 端口
-    networks:
-      - go_network
-    environment:
-      - TZ=Asia/Shanghai
-      - COLLECTOR_OTLP_ENABLED=true
-      - COLLECTOR_OTLP_HOST_PORT=0.0.0.0:14250
-      - COLLECTOR_OTLP_HTTP_HOST_PORT=0.0.0.0:4318
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.84.0
-    ports:
-      - "43170:4317"  # gRPC 端口（可选）
-      - "43180:4318"  # ✅ HTTP 端口（本地应用使用）
-    networks:
-      - go_network
-    volumes:
-      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml  # ✅ 使用官方默认路径
-    environment:
-      - TZ=Asia/Shanghai
-    depends_on:
-      - jaeger
-
-  # ----------------------
-  # 数据库服务
-  # ----------------------
-  mysql:
-    image: mysql:8.0.36 # 固定版本号，避免自动更新导致兼容性问题
-    container_name: go_mysql
-    restart: unless-stopped # 非手动停止时自动重启
-    ports:
-      - "3306:3306"
-    environment:
-      - TZ=Asia/Shanghai # 时区配置（覆盖容器默认时区）
-      - LANG=C.UTF-8
-      - MYSQL_ROOT_PASSWORD=123456 # root用户密码（生产环境建议用.env文件管理）
-      - MYSQL_DATABASE=go_admin # 初始化时自动创建的数据库
-      - MYSQL_USER=go_user # 自定义普通用户（避免与root冲突）
-      - MYSQL_PASSWORD=go_user123 # 普通用户密码
-      - MYSQL_ROOT_HOST=% # 允许root远程连接（生产环境建议限制IP）
-    volumes:
-      - mysql_data:/var/lib/mysql # 数据持久化卷（防止容器删除丢失数据）
-      - ../../mysql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql # 表结构初始化（按序号执行）
-      - ../../mysql/init_data.sql:/docker-entrypoint-initdb.d/02-init-data.sql # 初始数据（按序号执行）
-      - ../../mysql/init_user.sql:/docker-entrypoint-initdb.d/03-init_user.sql # 初始化 go_user（自定义权限）
-      - ../../conf/common/mysql.cnf:/etc/mysql/conf.d/custom.cnf:ro # 自定义配置（只读权限更安全）
-    command:
-      # 数据库启动参数（优先级高于配置文件）
-      - '--character-set-server=utf8mb4' # 全局字符集（支持emoji和多语言）
-      - '--collation-server=utf8mb4_unicode_ci' # 全局排序规则（多语言友好）
-      - '--sql-mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' # 严格模式+完整规则
-    healthcheck:
-      # 安全的健康检查配置
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "--password=${MYSQL_ROOT_PASSWORD}" ] # 用环境变量传密码，避免明文
-      interval: 10s # 每10秒检查一次
-      timeout: 5s # 检查超时时间
-      retries: 5 # 连续5次失败视为不健康
-      start_period: 30s # 启动后30秒内不检查（给足初始化时间）
-    networks:
-      - go_network # 加入自定义网络，与其他服务隔离通信
-    deploy:
-      # 资源限制（避免占用过多宿主机资源）
-      resources:
-        limits:
-          cpus: '1' # 最多使用1核CPU
-          memory: 1G # 最多使用1GB内存
-
-  # Caddy负载均衡器
-  caddy:
-    image: caddy:2.8.4-alpine  # 升级到2.8.0+版本
-    ports:
-      - "80:80"     
-      - "443:443"   
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-      - ./logs/caddy:/var/log/caddy
-    networks:
-      - go_network
-    depends_on:
-      - app1
-      - app2
-    # restart: always
-
-  # 监控服务
-  prometheus:
-    image: prom/prometheus:v2.47.0
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    networks:
-      - go_network
-    depends_on:
-      - app1
-      - app2
-
-  # Grafana监控面板
-  grafana:
-    image: grafana/grafana:10.2.0
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-    networks:
-      - go_network
-    depends_on:
-      - prometheus
+  data:
+    driver: bridge
+  obs:
+    driver: bridge
 
 volumes:
   caddy_data:
@@ -175,3 +34,297 @@ volumes:
   grafana_data:
   mysql_data:
     driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+
+# ---- 可复用片段 ----
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+x-app-common: &app_common
+  image: go_admin-app:latest
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+  init: true
+  stop_grace_period: 30s
+  restart: unless-stopped
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true
+  # Compose 原生限额（非 Swarm 也生效）；deploy 留给 Swarm 兼容
+  mem_limit: 512m
+  cpus: "1.0"
+  networks:
+    - edge
+    - data
+    - obs
+  healthcheck:
+    # 与 APP_PORT / config_docker.yaml server.port 保持一致
+    test: [ "CMD-SHELL", "curl -fsS http://127.0.0.1:$${APP_PORT:-8888}/health || exit 1" ]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 40s
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    otel-collector:
+      condition: service_started
+
+# 应用公共环境（密钥来自 conf/common/.env，经 applyEnvOverrides 覆盖 yaml）
+x-app-env: &app_env
+  APP_PORT: ${APP_PORT:-8888}
+  TZ: Asia/Shanghai
+  DATABASE_HOST: mysql
+  DATABASE_PORT: "3306"
+  DATABASE_USER: ${MYSQL_USER:-go_user}
+  DATABASE_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in conf/common/.env}
+  DATABASE_NAME: ${MYSQL_DATABASE:-go_admin}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in conf/common/.env}
+  OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_TRACES_EXPORTER: otlp
+
+services:
+  # --------------------------------------------------------------------------
+  # 应用双副本（INSTANCE_ID 写入 OTEL service.name，便于区分实例）
+  # --------------------------------------------------------------------------
+  app1:
+    <<: *app_common
+    environment:
+      <<: *app_env
+      INSTANCE_ID: app1
+    volumes:
+      - ../../conf:/app/conf:ro
+      - ../config_docker.yaml:/app/conf/config.yaml:ro
+      - ./logs/app1:/app/logs
+
+  app2:
+    <<: *app_common
+    environment:
+      <<: *app_env
+      INSTANCE_ID: app2
+    volumes:
+      - ../../conf:/app/conf:ro
+      - ../config_docker.yaml:/app/conf/config.yaml:ro
+      - ./logs/app2:/app/logs
+
+  # --------------------------------------------------------------------------
+  # 可观测性：链路
+  # --------------------------------------------------------------------------
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    restart: unless-stopped
+    logging: *default-logging
+    # all-in-one 适合单机/预发；大规模生产应换独立 Collector + 持久化存储
+    environment:
+      TZ: Asia/Shanghai
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: memory
+    ports:
+      # UI 仅本机；OTLP 不映射到宿主机（应用走 otel-collector）
+      - "${JAEGER_UI_BIND:-127.0.0.1}:${JAEGER_UI_PORT:-16686}:16686"
+    networks:
+      - obs
+    # jaeger all-in-one 镜像无 shell/wget，不做容器级 healthcheck
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    restart: unless-stopped
+    logging: *default-logging
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      # OTLP 上报口（不是网页！浏览器打开会失败）
+      #   gRPC: 应用/SDK → localhost:43170 或容器内 otel-collector:4317
+      #   HTTP: POST /v1/traces → localhost:43180（勿当 UI）
+      - "${OTEL_GRPC_HOST_PORT:-43170}:4317"
+      - "${OTEL_HTTP_HOST_PORT:-43180}:4318"
+      # 浏览器可打开的探活/调试页
+      - "${OTEL_HEALTH_HOST_BIND:-127.0.0.1}:${OTEL_HEALTH_HOST_PORT:-13133}:13133"
+      - "${OTEL_ZPAGES_HOST_BIND:-127.0.0.1}:${OTEL_ZPAGES_HOST_PORT:-55679}:55679"
+    networks:
+      - obs
+    depends_on:
+      - jaeger
+    # contrib 镜像多为 distroless，无 wget；依赖 service_started 即可
+
+  # --------------------------------------------------------------------------
+  # 数据层
+  # --------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0.41
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 1g
+    cpus: "1.0"
+    environment:
+      TZ: Asia/Shanghai
+      LANG: C.UTF-8
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in conf/common/.env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-go_admin}
+      MYSQL_USER: ${MYSQL_USER:-go_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in conf/common/.env}
+      MYSQL_ROOT_HOST: "%"
+    ports:
+      # 默认仅 127.0.0.1；生产若无需宿主机直连库，删除本 ports 段
+      - "${MYSQL_HOST_BIND:-127.0.0.1}:${MYSQL_HOST_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ../../mysql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../../mysql/init_data.sql:/docker-entrypoint-initdb.d/02-init-data.sql:ro
+      - ../../mysql/init_user.sql:/docker-entrypoint-initdb.d/03-init_user.sql:ro
+      # WSL/Windows 绑定时常为 0777，MySQL 拒绝 world-writable conf.d；先挂 /tmp 再拷贝
+      - ./mysql.cnf:/tmp/go_admin_mysql.cnf:ro
+    entrypoint:
+      - /bin/bash
+      - -ec
+      - |
+        install -m 0644 /tmp/go_admin_mysql.cnf /etc/mysql/conf.d/custom.cnf
+        exec docker-entrypoint.sh "$@"
+      - --
+    command:
+      - mysqld
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--sql-mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION"
+    healthcheck:
+      # $$ → 容器内 $MYSQL_ROOT_PASSWORD（勿在 healthcheck 明文写密码）
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+    networks:
+      - data
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 256m
+    cpus: "0.50"
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "${REDIS_HOST_BIND:-127.0.0.1}:${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis.conf:/etc/redis/redis.conf:ro
+    command: [ "redis-server", "/etc/redis/redis.conf" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - data
+    security_opt:
+      - no-new-privileges:true
+
+  # --------------------------------------------------------------------------
+  # 边缘入口（唯一建议对公网开放的服务）
+  # --------------------------------------------------------------------------
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 256m
+    cpus: "0.50"
+    user: "0:0" # 绑定 80/443；日志写宿主机 ./logs/caddy（WSL 挂载需可写）
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./logs/caddy:/var/log/caddy
+    networks:
+      - edge
+      - obs # 供 Prometheus 抓取 caddy:9090 metrics
+    depends_on:
+      app1:
+        condition: service_healthy
+      app2:
+        condition: service_healthy
+    healthcheck:
+      # alpine 镜像含 wget；探测 Caddy 自身 :80 /health（非上游 app）
+      test: [ "CMD", "wget", "-qO-", "http://127.0.0.1:80/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  # --------------------------------------------------------------------------
+  # 监控
+  # --------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 512m
+    cpus: "0.50"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "${PROMETHEUS_HOST_BIND:-127.0.0.1}:${PROMETHEUS_HOST_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - edge # 抓取 app1/app2
+      - obs  # 抓取 jaeger / otel / caddy
+    depends_on:
+      app1:
+        condition: service_healthy
+      app2:
+        condition: service_healthy
+      caddy:
+        condition: service_started
+    security_opt:
+      - no-new-privileges:true
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 256m
+    cpus: "0.50"
+    environment:
+      TZ: Asia/Shanghai
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?set GF_SECURITY_ADMIN_PASSWORD in conf/common/.env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s/"
+    ports:
+      - "${GRAFANA_HOST_BIND:-127.0.0.1}:${GRAFANA_HOST_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - obs
+    depends_on:
+      - prometheus
+    security_opt:
+      - no-new-privileges:true

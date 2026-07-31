@@ -21,15 +21,15 @@ import (
 //
 // 依赖方向：iam -> user.UserFinder（查用户基础信息），不反向依赖。
 type UserRoleService struct {
-	userRoleRepo pkgrepo.Repository[model.UserRole]
+	userRoleRepo *pkgrepo.Repository[model.UserRole]
 	roleSvc      *RoleService
 	userFinder   usersvc.UserFinder
 }
 
 // NewUserRoleService 创建用户角色分配服务
-func NewUserRoleService(processor pkgrepo.ORMProcessor, roleSvc *RoleService, userFinder usersvc.UserFinder) *UserRoleService {
+func NewUserRoleService(db *pkgrepo.DB, roleSvc *RoleService, userFinder usersvc.UserFinder) *UserRoleService {
 	return &UserRoleService{
-		userRoleRepo: newRepositories(processor).userRole,
+		userRoleRepo: newRepositories(db).userRole,
 		roleSvc:      roleSvc,
 		userFinder:   userFinder,
 	}
@@ -55,10 +55,10 @@ func (s *UserRoleService) assignUserRoles(ctx context.Context, userID uint64, ro
 	toRemoveIDs := lo.Filter(existingIDs, func(id uint64, _ int) bool { return !lo.Contains(roleIDs, id) })
 	toAddIDs := lo.Filter(roleIDs, func(id uint64, _ int) bool { return !lo.Contains(existingIDs, id) })
 
-	_, err = s.userRoleRepo.Transaction(ctx, func(txCtx context.Context) (any, error) {
+	return s.userRoleRepo.Transaction(ctx, func(txCtx context.Context) error {
 		if len(toRemoveIDs) > 0 {
 			if err := s.userRoleRepo.QueryBuilder().Eq("user_id", userID).In("role_id", toRemoveIDs).Delete(txCtx); err != nil {
-				return nil, errors.Wrap(err, "failed to delete user roles")
+				return errors.Wrap(err, "failed to delete user roles")
 			}
 		}
 		if len(toAddIDs) > 0 {
@@ -66,12 +66,11 @@ func (s *UserRoleService) assignUserRoles(ctx context.Context, userID uint64, ro
 				return model.UserRole{UserID: userID, RoleID: roleID}
 			})
 			if err := s.userRoleRepo.BatchCreate(txCtx, userRoles); err != nil {
-				return nil, errors.Wrap(err, "failed to create user roles")
+				return errors.Wrap(err, "failed to create user roles")
 			}
 		}
-		return nil, nil
+		return nil
 	})
-	return err
 }
 
 // RetrieveRolesByUserID 通过用户 ID 查询关联角色（不含权限展开），

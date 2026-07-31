@@ -1,0 +1,46 @@
+# golangci-lint v1.64+（与 Go 1.24 对齐）
+# 本地 / CI：make lint-strict
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - unconvert
+    - gofmt
+    - gosimple
+    - typecheck
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment # 为省几个字节改结构体顺序，收益不配噪音
+  misspell:
+    locale: US
+  staticcheck:
+    checks: ["all"]
+
+issues:
+  exclude-use-default: true
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    - dist
+    - build
+    - vendor
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

@@ -62,7 +62,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{go_admin_address}}/api/protected/role/permissions?limit=10&offset=0&role_id=1&flags=1",
+							"raw": "{{go_admin_address}}/api/protected/role/permission/list?limit=10&offset=0&role_id=1&flags=1",
 							"host": [
 								"{{go_admin_address}}"
 							],
@@ -70,7 +70,8 @@
 								"api",
 								"protected",
 								"role",
-								"permissions"
+								"permission",
+								"list"
 							],
 							"query": [
 								{
@@ -315,7 +316,12 @@
 					"name": "UserAssignRoles",
 					"request": {
 						"method": "POST",
-						"header": [],
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\r\n  \"user_id\": 1,\r\n  \"role_ids\": [1]\r\n}",
@@ -344,34 +350,36 @@
 			]
 		},
 		{
-			"name": "data_permission",
+			"name": "system-setting",
 			"item": [
 				{
-					"name": "GetDataPermissionList",
+					"name": "GetSystemSettingList",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{go_admin_address}}/api/protected/user/data/permission/list?limit=100&offset=0",
+							"raw": "{{go_admin_address}}/api/protected/system-setting/list?limit=10&offset=0&category=basic",
 							"host": [
 								"{{go_admin_address}}"
 							],
 							"path": [
 								"api",
 								"protected",
-								"user",
-								"data",
-								"permission",
+								"system-setting",
 								"list"
 							],
 							"query": [
 								{
 									"key": "limit",
-									"value": "100"
+									"value": "10"
 								},
 								{
 									"key": "offset",
 									"value": "0"
+								},
+								{
+									"key": "category",
+									"value": "basic"
 								}
 							]
 						}
@@ -379,403 +387,23 @@
 					"response": []
 				},
 				{
-					"name": "GetMyLockResources",
+					"name": "GetSystemSetting",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{go_admin_address}}/api/protected/user/my/locked/resources?limit=100&offset=0",
+							"raw": "{{go_admin_address}}/api/protected/system-setting?id=1",
 							"host": [
 								"{{go_admin_address}}"
 							],
 							"path": [
 								"api",
 								"protected",
-								"user",
-								"my",
-								"locked",
-								"resources"
+								"system-setting"
 							],
 							"query": [
 								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "LockResource",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n\t\"resource_type\": \"customer\",\n\t\"resource_id\": 1,\n    \"level\": 1,\n\t\"lock_reason\": \"test\",\n\t\"expire_hours\": 0\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/user/lock/resource",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"user",
-								"lock",
-								"resource"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "UnlockResource",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n\t\"resource_type\": \"customer\",\n\t\"resource_id\": 1\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/user/unlock/resource",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"user",
-								"unlock",
-								"resource"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "CheckResourcePermission",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"user_id\": 1,\n\t\"resource_type\": \"customer\",\n\t\"resource_id\": 1\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/user/check/resource/permission",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"user",
-								"check",
-								"resource",
-								"permission"
-							]
-						}
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "business",
-			"item": [
-				{
-					"name": "GetCustomerList",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/customer/list?limit=100&offset=0",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"customer",
-								"list"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GetOrderList",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/order/list?limit=100&offset=0",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"order",
-								"list"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GetContractList",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/contract/list?limit=100&offset=0",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"contract",
-								"list"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GetProductList",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/product/list?limit=100&offset=0",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"product",
-								"list"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GetContractList",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/contract/list?limit=100&offset=0",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"contract",
-								"list"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GetDepartmentList",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/department/list?limit=100&offset=0",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"department",
-								"list"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GetSalesOpportunityList",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/sales/opportunity/list?limit=100&offset=0",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"sales",
-								"opportunity",
-								"list"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GetProductCategoryList",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/product/category/list?limit=100&offset=0",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"product",
-								"category",
-								"list"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "GetOpportunityTimelineList",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{go_admin_address}}/api/protected/opportunity/timeline/list?limit=100&offset=0&opportunity_id=1",
-							"host": [
-								"{{go_admin_address}}"
-							],
-							"path": [
-								"api",
-								"protected",
-								"opportunity",
-								"timeline",
-								"list"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
-								},
-								{
-									"key": "opportunity_id",
+									"key": "id",
 									"value": "1"
 								}
 							]
@@ -784,32 +412,126 @@
 					"response": []
 				},
 				{
-					"name": "GetServiceTicketList",
+					"name": "GetSystemSettingByCategory",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{go_admin_address}}/api/protected/service/ticket/list?limit=100&offset=0",
+							"raw": "{{go_admin_address}}/api/protected/system-setting/by-category?category=basic",
 							"host": [
 								"{{go_admin_address}}"
 							],
 							"path": [
 								"api",
 								"protected",
-								"service",
-								"ticket",
-								"list"
+								"system-setting",
+								"by-category"
 							],
 							"query": [
 								{
-									"key": "limit",
-									"value": "100"
-								},
-								{
-									"key": "offset",
-									"value": "0"
+									"key": "category",
+									"value": "basic"
 								}
 							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "CreateSystemSetting",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/system-setting",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"system-setting"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"category\": \"basic\",\n    \"key\": \"demo_key\",\n    \"value\": \"demo_value\",\n    \"type\": 1,\n    \"description\": \"demo setting\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "UpdateSystemSetting",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/system-setting",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"system-setting"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": 1,\n    \"category\": \"basic\",\n    \"key\": \"system_name\",\n    \"value\": \"Go Admin\",\n    \"type\": 1,\n    \"description\": \"系统名称\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "DeleteSystemSetting",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{go_admin_address}}/api/protected/system-setting",
+							"host": [
+								"{{go_admin_address}}"
+							],
+							"path": [
+								"api",
+								"protected",
+								"system-setting"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ids\": [999]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
 						}
 					},
 					"response": []
@@ -822,32 +544,12 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8719/metric",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "8719",
-					"path": [
-						"metric"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Hello",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{go_admin_address}}/api/hello",
+					"raw": "{{go_admin_address}}/metrics",
 					"host": [
 						"{{go_admin_address}}"
 					],
 					"path": [
-						"api",
-						"hello"
+						"metrics"
 					]
 				}
 			},
@@ -935,7 +637,7 @@
 			"response": []
 		},
 		{
-			"name": "LoginOut",
+			"name": "Logout",
 			"event": [
 				{
 					"listen": "test",
@@ -961,14 +663,13 @@
 					}
 				},
 				"url": {
-					"raw": "{{go_admin_address}}/api/login/out",
+					"raw": "{{go_admin_address}}/api/logout",
 					"host": [
 						"{{go_admin_address}}"
 					],
 					"path": [
 						"api",
-						"login",
-						"out"
+						"logout"
 					]
 				}
 			},
@@ -1056,44 +757,13 @@
 			"response": []
 		},
 		{
-			"name": "Protected",
-			"protocolProfileBehavior": {
-				"disableBodyPruning": true
-			},
-			"request": {
-				"method": "GET",
-				"header": [],
-				"body": {
-					"mode": "raw",
-					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"password\"\r\n}",
-					"options": {
-						"raw": {
-							"language": "json"
-						}
-					}
-				},
-				"url": {
-					"raw": "{{go_admin_address}}/api/protected/test",
-					"host": [
-						"{{go_admin_address}}"
-					],
-					"path": [
-						"api",
-						"protected",
-						"test"
-					]
-				}
-			},
-			"response": []
-		},
-		{
 			"name": "CreateUser",
 			"request": {
 				"method": "POST",
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"username\": \"admin\",\r\n    \"password\": \"password\",\r\n    \"email\": \"test@example.com\"\r\n}",
+					"raw": "{\r\n    \"username\": \"demo2\",\r\n    \"password\": \"admin123\",\r\n    \"email\": \"demo2@example.com\",\r\n    \"phone\": \"13800000002\",\r\n    \"role_ids\": [2],\r\n    \"status\": 1\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -1176,7 +846,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "{{go_admin_address}}/api/protected/user?id=1",
+					"raw": "{{go_admin_address}}/api/protected/user?username=admin",
 					"host": [
 						"{{go_admin_address}}"
 					],
@@ -1189,11 +859,13 @@
 						{
 							"key": "id",
 							"value": "1",
-							"disabled": true
+							"disabled": true,
+							"description": "与 username 二选一，都传时优先 id"
 						},
 						{
 							"key": "username",
-							"value": "admin"
+							"value": "admin",
+							"description": "与 id 二选一"
 						}
 					]
 				}

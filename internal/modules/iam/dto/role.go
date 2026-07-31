@@ -62,12 +62,12 @@ type AssignRolePermissionsRequest struct {
 
 // RoleResponse 角色视图对象
 type RoleResponse struct {
-	ID          uint64                 `json:"id"`
-	Name        string                 `json:"name"`
-	Code        string                 `json:"code"`
-	Description string                 `json:"description"`
-	Status      int                    `json:"status"`
-	CreateTime  time.Time              `json:"create_time"`
-	UpdateTime  time.Time              `json:"update_time"`
-	Permissions []*PermissionResponse  `json:"permissions,omitempty"`
+	ID          uint64                `json:"id"`
+	Name        string                `json:"name"`
+	Code        string                `json:"code"`
+	Description string                `json:"description"`
+	Status      int                   `json:"status"`
+	CreateTime  time.Time             `json:"create_time"`
+	UpdateTime  time.Time             `json:"update_time"`
+	Permissions []*PermissionResponse `json:"permissions,omitempty"`
 }

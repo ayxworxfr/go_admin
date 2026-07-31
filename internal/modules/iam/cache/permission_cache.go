@@ -1,8 +1,9 @@
 package cache
 
 import (
-	"sync"
 	"time"
+
+	"github.com/ayxworxfr/go_admin/pkg/store"
 )
 
 // PermissionCache 用户权限路径缓存的策略接口。旧版本把 `permissionCache
@@ -21,61 +22,36 @@ type PermissionCache interface {
 	InvalidateAll()
 }
 
-// entry 缓存条目，记录写入时间以支持 TTL 判断
-type entry struct {
-	data      map[string]bool
-	expiresAt time.Time
-}
-
 // InMemoryCache 进程内权限缓存实现，带真实的 TTL 过期判断。
 // 不解决多实例一致性问题（见重构文档 Non-Goals）——每个实例各自维护一份，
 // 靠 TTL 兜底最终一致，而不是靠 ClearAll 广播。
+//
+// 底层复用 pkg/store.Memory，本类型只保留权限域语义（userID → 权限路径集）。
 type InMemoryCache struct {
-	mu  sync.RWMutex
-	ttl time.Duration
-	m   map[uint64]entry
+	store *store.Memory[uint64, map[string]bool]
 }
 
 // NewInMemoryCache 创建带 TTL 的进程内缓存
 func NewInMemoryCache(ttl time.Duration) *InMemoryCache {
-	return &InMemoryCache{
-		ttl: ttl,
-		m:   make(map[uint64]entry),
-	}
+	return &InMemoryCache{store: store.NewMemory[uint64, map[string]bool](ttl)}
 }
 
 // Get 命中且未过期才返回 true；已过期的条目会被顺手清除，避免内存堆积
 func (c *InMemoryCache) Get(userID uint64) (map[string]bool, bool) {
-	c.mu.RLock()
-	e, ok := c.m[userID]
-	c.mu.RUnlock()
-	if !ok {
-		return nil, false
-	}
-	if time.Now().After(e.expiresAt) {
-		c.InvalidateUser(userID)
-		return nil, false
-	}
-	return e.data, true
+	return c.store.Get(userID)
 }
 
 // Set 写入缓存并重置过期时间
 func (c *InMemoryCache) Set(userID uint64, perms map[string]bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.m[userID] = entry{data: perms, expiresAt: time.Now().Add(c.ttl)}
+	c.store.Set(userID, perms)
 }
 
 // InvalidateUser 清除单个用户的缓存
 func (c *InMemoryCache) InvalidateUser(userID uint64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.m, userID)
+	c.store.Delete(userID)
 }
 
 // InvalidateAll 清除所有用户的缓存
 func (c *InMemoryCache) InvalidateAll() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.m = make(map[uint64]entry)
+	c.store.Clear()
 }

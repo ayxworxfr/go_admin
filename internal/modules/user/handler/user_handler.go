@@ -6,8 +6,7 @@ import (
 	"github.com/ayxworxfr/go_admin/internal/modules/user/dto"
 	"github.com/ayxworxfr/go_admin/internal/modules/user/model"
 	"github.com/ayxworxfr/go_admin/internal/modules/user/service"
-	"github.com/ayxworxfr/go_admin/pkg/context"
-	"github.com/ayxworxfr/go_admin/pkg/jwtauth"
+	"github.com/ayxworxfr/go_admin/pkg/reqctx"
 	"github.com/jinzhu/copier"
 )
 
@@ -24,17 +23,17 @@ type PermissionPathResolver interface {
 	GetUserPermissionPaths(ctx stdctx.Context, userID uint64) ([]string, error)
 }
 
-// Handler 用户管理接口
+// Handler 用户管理接口。当前用户信息只从中间件注入的 JWT 载荷读取，
+// 不持有 *jwtauth.JWT——签名校验与签发都在 iam/auth 侧完成。
 type Handler struct {
 	svc          *service.Service
 	roleAssigner RoleAssigner
 	permResolver PermissionPathResolver
-	jwt          *jwtauth.JWT
 }
 
 // NewHandler 创建用户处理器，依赖均由 Container 装配注入。
-func NewHandler(svc *service.Service, roleAssigner RoleAssigner, permResolver PermissionPathResolver, jwt *jwtauth.JWT) *Handler {
-	return &Handler{svc: svc, roleAssigner: roleAssigner, permResolver: permResolver, jwt: jwt}
+func NewHandler(svc *service.Service, roleAssigner RoleAssigner, permResolver PermissionPathResolver) *Handler {
+	return &Handler{svc: svc, roleAssigner: roleAssigner, permResolver: permResolver}
 }
 
 func toUserResponse(u *model.User) (*dto.UserResponse, error) {
@@ -46,98 +45,108 @@ func toUserResponse(u *model.User) (*dto.UserResponse, error) {
 }
 
 // @route Get /user
-func (h *Handler) GetUser(c *context.Context, req *dto.GetUserRequest) *context.Response {
-	u, err := h.svc.FindByID(c.Context(), req.ID)
+func (h *Handler) GetUser(c *reqctx.Context, req *dto.GetUserRequest) *reqctx.Response {
+	var (
+		u   *model.User
+		err error
+	)
+	switch {
+	case req.ID > 0:
+		u, err = h.svc.FindByID(c.Context(), req.ID)
+	case req.Username != "":
+		u, err = h.svc.FindByUsername(c.Context(), req.Username)
+	default:
+		return reqctx.ParamError("id or username is required")
+	}
 	if err != nil {
-		return context.DatabaseError(err)
+		return reqctx.DatabaseError(err)
 	}
 
 	resp, err := toUserResponse(u)
 	if err != nil {
-		return context.InternalError(err)
+		return reqctx.InternalError(err)
 	}
-	return context.Success(resp)
+	return reqctx.Success(resp)
 }
 
 // @route Post /user
-func (h *Handler) CreateUser(c *context.Context, req *dto.CreateUserRequest) *context.Response {
+func (h *Handler) CreateUser(c *reqctx.Context, req *dto.CreateUserRequest) *reqctx.Response {
 	u, err := h.svc.Create(c.Context(), req)
 	if err != nil {
-		return context.DatabaseError(err)
+		return reqctx.DatabaseError(err)
 	}
 
 	if err := h.roleAssigner.AssignRoles(c.Context(), u.ID, req.RoleIDs); err != nil {
-		return context.DatabaseError(err)
+		return reqctx.DatabaseError(err)
 	}
 
 	resp, err := toUserResponse(u)
 	if err != nil {
-		return context.InternalError(err)
+		return reqctx.InternalError(err)
 	}
-	return context.Success(resp)
+	return reqctx.Success(resp)
 }
 
 // @route Put /user
-func (h *Handler) UpdateUser(c *context.Context, req *dto.UpdateUserRequest) *context.Response {
+func (h *Handler) UpdateUser(c *reqctx.Context, req *dto.UpdateUserRequest) *reqctx.Response {
 	u, err := h.svc.Update(c.Context(), req)
 	if err != nil {
-		return context.DatabaseError(err)
+		return reqctx.DatabaseError(err)
 	}
 
 	if req.RoleIDs != nil {
 		if err := h.roleAssigner.AssignRoles(c.Context(), u.ID, *req.RoleIDs); err != nil {
-			return context.DatabaseError(err)
+			return reqctx.DatabaseError(err)
 		}
 	}
 
 	resp, err := toUserResponse(u)
 	if err != nil {
-		return context.InternalError(err)
+		return reqctx.InternalError(err)
 	}
-	return context.Success(resp)
+	return reqctx.Success(resp)
 }
 
 // @route Get /user/list
-func (h *Handler) GetUserList(c *context.Context, req *dto.GetUserListRequest) *context.Response {
+func (h *Handler) GetUserList(c *reqctx.Context, req *dto.GetUserListRequest) *reqctx.Response {
 	data, total, err := h.svc.List(c.Context(), req)
 	if err != nil {
-		return context.DatabaseError(err)
+		return reqctx.DatabaseError(err)
 	}
 
 	voList := make([]*dto.UserResponse, 0, len(data))
 	for i := range data {
 		resp, err := toUserResponse(&data[i])
 		if err != nil {
-			return context.InternalError(err)
+			return reqctx.InternalError(err)
 		}
 		voList = append(voList, resp)
 	}
-	return context.PageSuccess(voList, total)
+	return reqctx.PageSuccess(voList, total)
 }
 
 // @route Delete /user
-func (h *Handler) DeleteUser(c *context.Context, req *dto.DeleteUserRequest) *context.Response {
+func (h *Handler) DeleteUser(c *reqctx.Context, req *dto.DeleteUserRequest) *reqctx.Response {
 	if err := h.svc.DeleteUsers(c.Context(), req.IDs); err != nil {
-		return context.DatabaseError(err)
+		return reqctx.DatabaseError(err)
 	}
-	return context.NoContent()
+	return reqctx.NoContent()
 }
 
 // @route Get /user/routes
-func (h *Handler) GetUserRoutes(c *context.Context) *context.Response {
-	claims, err := h.jwt.ContextClaims(c.RequestContext)
+func (h *Handler) GetUserRoutes(c *reqctx.Context) *reqctx.Response {
+	claims, err := c.Claims()
 	if err != nil {
-		return context.Unauthorized("Invalid token")
+		return reqctx.Unauthorized("Invalid token")
 	}
-
-	userID, err := h.jwt.GetUserIDUint64(c.RequestContext)
+	userID, err := c.UserID()
 	if err != nil {
-		return context.Unauthorized("Invalid token")
+		return reqctx.Unauthorized("Invalid token")
 	}
 
 	permissionPaths, err := h.permResolver.GetUserPermissionPaths(c.Context(), userID)
 	if err != nil {
-		return context.InternalError(err)
+		return reqctx.InternalError(err)
 	}
 
 	result := &dto.UserRoutes{
@@ -145,14 +154,14 @@ func (h *Handler) GetUserRoutes(c *context.Context) *context.Response {
 		Role:     claims.RoleKey,
 		Routes:   permissionPaths,
 	}
-	return context.Success(result)
+	return reqctx.Success(result)
 }
 
 // @route Get /user/current
-func (h *Handler) GetUserCurrent(c *context.Context) *context.Response {
-	claims, err := h.jwt.ContextClaims(c.RequestContext)
+func (h *Handler) GetUserCurrent(c *reqctx.Context) *reqctx.Response {
+	claims, err := c.Claims()
 	if err != nil {
-		return context.Unauthorized("Invalid token")
+		return reqctx.Unauthorized("Invalid token")
 	}
 	result := map[string]any{
 		"name":   claims.Nice,
@@ -161,5 +170,5 @@ func (h *Handler) GetUserCurrent(c *context.Context) *context.Response {
 		"email":  "antdesign@alipay.com",
 		"access": claims.RoleKey,
 	}
-	return context.Success(result)
+	return reqctx.Success(result)
 }

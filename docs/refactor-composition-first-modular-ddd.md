@@ -1,11 +1,20 @@
 # go_admin 重构设计文档：组合优先 + 模块化 DDD
 
-- 状态：已落地（历史设计草案，部分细节以代码为准）
+- 状态：已落地（**历史设计草案**；正文大量段落描述的是重构前目标/中间态，**勿按正文抄实现**）
 - 关联：本文档承接《架构评审》结论（分层脚手架 vs README 声称的 Clean Architecture 的差距）
-- 范围：`internal/` 目录结构 + 依赖关系；`pkg/` 保持不变（见 Non-Goals）
-- **落地偏差（以代码与 skill 为准，勿按本文旧表述实现）**：
-  1. **仓储封装**：文中多处写的 `service/internal/repository/` 未采用。当前默认是 `service` 包内 unexported 的 `repo` 字段 / `newRepositories`，靠包可见性挡 handler；权威说明见 [`.cursor/skills/developing-go-admin-modules/references/module-structure.md`](../.cursor/skills/developing-go-admin-modules/references/module-structure.md) §2。
-  2. **密码迁移**：文中 P5 的懒迁移 + `Sha384LegacyHasher` 未做；按"不需要向前兼容"直接切 Argon2id，并更新了 `mysql/init_data.sql` 种子哈希。
+- 权威现状：以代码 + [`.cursor/skills/developing-go-admin-modules/SKILL.md`](../.cursor/skills/developing-go-admin-modules/SKILL.md) 为准；入口速览见根目录 [README.md](../README.md)
+- 范围：`internal/` 目录结构 + 依赖关系；`pkg/` 后续也有演进（见下方偏差）
+
+## 落地偏差（必读）
+
+以当前代码为准，下列正文表述均已过时：
+
+1. **仓储封装**：文中 `service/internal/repository/` 未采用。当前默认是 `service` 包内 unexported 的 `repo` / `newRepositories`；见 [module-structure.md](../.cursor/skills/developing-go-admin-modules/references/module-structure.md) §2。
+2. **密码迁移**：P5 的懒迁移 + `Sha384LegacyHasher` 未做；直接切 Argon2id，并更新了 `mysql/init_data.sql`。
+3. **`pkg/repository`**：正文中的 `ORMProcessor` / `Repository[T]` 大接口 / `NewXormProcessor` 已废弃。现为具体类型 `*DB` + `Repository[T]` + `QueryBuilder`，事务按需 `db.Transaction(ctx, fn)`，见 [repository-and-testing.md](../.cursor/skills/developing-go-admin-modules/references/repository-and-testing.md)。
+4. **路由注册**：正文「AutoRegister 原样保留 / 仅反射推断」已过时。现为 `router.Register`：优先查编译期 `routes_gen.go`（`cmd/routegen` 扫描 `// @route` 生成），无表项才按方法名推断；运行时 `ParseFile` 已删除。改 handler 后需 `make generate`。
+5. **依赖装配**：无 `service.XxxInstance` 过渡别名；只有 `bootstrap.Container`。路由挂载在 `bootstrap/routes.go` → `App.SetupRoutes`，不是 `cmd/main.go` 里直接 `AutoRegister`。
+6. **Container 示例代码**：正文 `processor := repository.NewXormProcessor(engine)` 及按模块拆出的 `*repo.New` 与现状不符；当前是 `pkgrepo.New(engine)` 后在各 `NewService` 内构造 `NewRepository[T](db)`。
 
 ---
 

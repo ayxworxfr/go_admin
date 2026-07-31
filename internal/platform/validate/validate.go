@@ -23,12 +23,10 @@ func (d *DecimalBinder) Name() string {
 	return "decimal"
 }
 
+// Bind 实现 Hertz Binder：先走默认绑定，再按 Content-Type 补 decimal 字段处理。
+// Hertz ≥0.10.x 将 Bind 与 Validate 拆分，不再提供 Binder.BindAndValidate。
 func (d *DecimalBinder) Bind(req *protocol.Request, v any, params param.Params) error {
-	return d.BindAndValidate(req, v, params)
-}
-
-func (d *DecimalBinder) BindAndValidate(req *protocol.Request, v interface{}, params param.Params) error {
-	if err := binding.DefaultBinder().BindAndValidate(req, v, params); err != nil {
+	if err := binding.DefaultBinder().Bind(req, v, params); err != nil {
 		return err
 	}
 	contentType := string(req.Header.ContentType())
@@ -39,9 +37,16 @@ func (d *DecimalBinder) BindAndValidate(req *protocol.Request, v interface{}, pa
 		strings.Contains(contentType, consts.MIMEMultipartPOSTForm):
 		return d.BindForm(req, v)
 	default:
-		// 使用默认校验器
 		return nil
 	}
+}
+
+// Validate 实现 Hertz Binder：默认 vd 校验后，再跑 decimal 专用规则。
+func (d *DecimalBinder) Validate(req *protocol.Request, v any) error {
+	if err := binding.DefaultBinder().Validate(req, v); err != nil {
+		return err
+	}
+	return d.handleDecimalFields(v)
 }
 
 func (d *DecimalBinder) BindQuery(req *protocol.Request, v any) error {

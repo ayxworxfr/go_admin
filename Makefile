@@ -3,9 +3,11 @@
 # ==============================
 PROJECT_NAME := go_admin
 BINARY_NAME := $(PROJECT_NAME)
-VERSION := 0.1.0
+# 可用 make build VERSION=1.2.0 / make release VERSION=1.2.0 覆盖
+VERSION ?= 0.1.0
 BUILD := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 MAIN := cmd/main.go
+REMOTE ?= origin
 
 # ==============================
 # 路径与平台配置
@@ -49,7 +51,12 @@ BINARY := $(BUILD_DIR)/$(BINARY_NAME)$(BINARY_EXT)
 # ==============================
 LD_FLAGS := -X "main.version=$(VERSION)" -X "main.build=$(BUILD)"
 
-# 依赖工具
+# 开发工具版本（改这里会自动重装；golangci 用官方二进制以匹配 Go 1.24）
+STATICCHECK_VERSION := v0.6.1
+GOLANGCI_LINT_VERSION := v1.64.8
+GOTESTSUM_VERSION := v1.12.3
+TOOLS_STAMP := staticcheck@$(STATICCHECK_VERSION)+golangci-lint@$(GOLANGCI_LINT_VERSION)+gotestsum@$(GOTESTSUM_VERSION)
+
 GOLANGCI_LINT := $(GOPATH)/bin/golangci-lint$(BINARY_EXT)
 STATICCHECK := $(GOPATH)/bin/staticcheck$(BINARY_EXT)
 GOTESTSUM := $(GOPATH)/bin/gotestsum$(BINARY_EXT)
@@ -57,7 +64,10 @@ GOTESTSUM := $(GOPATH)/bin/gotestsum$(BINARY_EXT)
 # ==============================
 # .PHONY 目标声明
 # ==============================
-.PHONY: all clean build run test lint fmt help version update-deps check docker-build docker-run docker-compose-up docker-compose-down docker-compose-logs docker-compose-restart docker-compose-rebuild docker-compose-status docker-compose-clean
+.PHONY: all clean build generate run test lint lint-strict fmt help version update-deps deps check \
+	docker-build docker-run docker-compose-up docker-compose-down docker-compose-logs \
+	docker-compose-restart docker-compose-rebuild docker-compose-status docker-compose-clean \
+	tag release tag-push
 
 # ==============================
 # 基础目标
@@ -69,20 +79,26 @@ all: help
 # ==============================
 DEPS_LOCK := .make_deps_installed
 
-$(DEPS_LOCK):
-	@echo "Installing dependencies..."
-	@$(GO) mod download
-	@echo "Installing development tools..."
-	@$(GO) install honnef.co/go/tools/cmd/staticcheck@v0.6.1
-	@$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.2
-	@$(GO) install gotest.tools/gotestsum@latest
-	@touch $@
+deps: ## Install dependencies and pinned dev tools
+	@stamp="$(TOOLS_STAMP)"; \
+	if [ -f "$(DEPS_LOCK)" ] && [ "$$(cat "$(DEPS_LOCK)" 2>$(NULL_DEVICE))" = "$$stamp" ]; then \
+		exit 0; \
+	fi; \
+	echo "Installing module deps & tools ($$stamp)..."; \
+	$(GO) mod download; \
+	$(GO) install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION); \
+	$(GO) install gotest.tools/gotestsum@$(GOTESTSUM_VERSION); \
+	echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION) (official binary)..."; \
+	if command -v curl >/dev/null 2>&1; then \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+			| sh -s -- -b "$(GOPATH)/bin" $(GOLANGCI_LINT_VERSION); \
+	else \
+		$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
+	fi; \
+	printf '%s\n' "$$stamp" > "$(DEPS_LOCK)"; \
+	echo "Tools ready."
 
-.PHONY: deps
-deps: $(DEPS_LOCK) ## Install dependencies and dev tools
-
-.PHONY: update-deps
-update-deps: ## Update dependencies and reinstall tools
+update-deps: ## Update module deps and reinstall tools
 	@echo "Updating dependencies..."
 	@$(GO) get -u ./...
 	@$(GO) mod tidy
@@ -92,13 +108,13 @@ update-deps: ## Update dependencies and reinstall tools
 # ==============================
 # 代码质量检查
 # ==============================
-fmt: ## Format code
+fmt: ## Format code (gofmt -s：含简化重写)
 	@echo "Formatting code..."
-	@$(GO) fmt -s -w ./
+	@gofmt -s -w .
 
 fmt-check: ## Check code formatting
 	@echo "Checking code format..."
-	@test -z "$$($(GO) fmt -s -l .)"
+	@test -z "$$(gofmt -s -l .)"
 
 lint: deps ## Run linters
 	@echo "Running linters..."
@@ -133,13 +149,18 @@ test-xml: deps ## Generate JUnit format test report
 # ==============================
 # 构建目标
 # ==============================
-build: ## Build binary for current platform
+generate: ## Scan // @route and regenerate routes_gen.go
+	@echo "Generating compiled route table..."
+	@$(GO) run ./cmd/routegen -root .
+	@echo "Route table up to date"
+
+build: generate ## Build binary for current platform
 	@echo "Building binary for current platform..."
 	@$(MKDIR) $(BUILD_DIR)
 	@$(GO) build -o $(BINARY) -ldflags "$(LD_FLAGS)" $(MAIN)
 	@echo "Build complete: $(BINARY)"
 
-cross-build: clean ## Build binaries for multiple platforms
+cross-build: clean generate ## Build binaries for multiple platforms
 	@echo "Starting cross-platform build..."
 	@$(MKDIR) $(DIST_DIR)
 	@for platform in $(PLATFORMS); do \
@@ -155,6 +176,22 @@ cross-build: clean ## Build binaries for multiple platforms
 run: build ## Build and run the program
 	@echo "Running the program..."
 	@./$(BINARY)
+
+# ==============================
+# 发版（逻辑在 scripts/release-tag.sh）
+# ==============================
+#   make tag VERSION=1.2.0
+#   make release VERSION=1.2.0
+#   make release VERSION=1.2.0-rc.1 REMOTE=origin
+tag: ## Create annotated tag; usage: make tag VERSION=1.2.0
+	@test "$(origin VERSION)" = "command line" || { echo "usage: make tag VERSION=1.2.0" >&2; exit 1; }
+	@./scripts/release-tag.sh tag "$(VERSION)"
+
+release: ## Tag and push (triggers GitHub Release); usage: make release VERSION=1.2.0
+	@test "$(origin VERSION)" = "command line" || { echo "usage: make release VERSION=1.2.0" >&2; exit 1; }
+	@./scripts/release-tag.sh release "$(VERSION)" "$(REMOTE)"
+
+tag-push: release ## Alias for release
 
 # ==============================
 # 清理与帮助

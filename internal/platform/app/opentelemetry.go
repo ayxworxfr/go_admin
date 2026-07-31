@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ayxworxfr/go_admin/internal/platform/config"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
@@ -13,13 +14,15 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0" // 确保版本匹配
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 )
 
 type Shutdownable interface {
 	Shutdown(context.Context) error
 }
 
+// InitOpenTelemetry 初始化全局 TracerProvider。
+// 必须在 hertztracing.NewServerTracer() 之前调用，否则 HTTP span 会绑到 noop Provider，Jaeger 永远收不到。
 func InitOpenTelemetry(cfg config.OpenTelemetryConfig) (Shutdownable, error) {
 	if !cfg.Enable {
 		return nil, nil
@@ -66,9 +69,12 @@ func InitOpenTelemetry(cfg config.OpenTelemetryConfig) (Shutdownable, error) {
 	// 创建采样器
 	sampler := trace.TraceIDRatioBased(cfg.Sampling)
 
-	// 创建追踪提供器
+	// 创建追踪提供器：缩短批处理窗口，本地开发几秒内就能在 Jaeger 看到
 	tracerProvider := trace.NewTracerProvider(
-		trace.WithBatcher(exporter), // 使用批量导出提高性能
+		trace.WithBatcher(exporter,
+			trace.WithBatchTimeout(time.Second),
+			trace.WithMaxExportBatchSize(64),
+		),
 		trace.WithResource(res),
 		trace.WithSampler(sampler),
 	)

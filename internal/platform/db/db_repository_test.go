@@ -64,22 +64,21 @@ func TestTransactionConsistency(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	processor := repository.NewXormProcessor(testEngine)
-	userRepo := repository.NewRepository[testModel](processor)
+	db := repository.New(testEngine)
+	userRepo := repository.NewRepository[testModel](db)
 
 	user := &testModel{Username: "tx-test", Email: "test@example.com"}
 
 	createFun := func(raiseError bool) error {
-		_, err := userRepo.Transaction(context.Background(), func(txCtx context.Context) (any, error) {
+		return userRepo.Transaction(context.Background(), func(txCtx context.Context) error {
 			if err := userRepo.Create(txCtx, user); err != nil {
-				return nil, err
+				return err
 			}
 			if raiseError {
-				return nil, errors.New("business error")
+				return errors.New("business error")
 			}
-			return nil, nil
+			return nil
 		})
-		return err
 	}
 
 	t.Run("Success", func(t *testing.T) {
@@ -106,8 +105,8 @@ func TestUserRepo(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	processor := repository.NewXormProcessor(testEngine)
-	userRepo := repository.NewRepository[testModel](processor)
+	db := repository.New(testEngine)
+	userRepo := repository.NewRepository[testModel](db)
 	ctx := context.Background()
 
 	t.Run("Create", func(t *testing.T) {
@@ -217,5 +216,37 @@ func TestUserRepo(t *testing.T) {
 		if count != 5 {
 			t.Fatalf("Expected count 5, got %d", count)
 		}
+	})
+
+	t.Run("OrAndGroup", func(t *testing.T) {
+		clearTestDB()
+		fixtures := []testModel{
+			{Username: "alice", Password: "p", Email: "alice@example.com"},
+			{Username: "bob", Password: "p", Email: "bob@example.com"},
+			{Username: "carol", Password: "p", Email: "carol@example.com"},
+		}
+		for i := range fixtures {
+			if _, err := testEngine.Insert(&fixtures[i]); err != nil {
+				t.Fatalf("Failed to insert fixture: %v", err)
+			}
+		}
+
+		// username = alice OR username = bob
+		rows, err := userRepo.QueryBuilder().
+			Eq("username", "alice").
+			Or().Eq("username", "bob").
+			Find(ctx)
+		assert.NoError(t, err)
+		assert.Len(t, rows, 2)
+
+		// email LIKE %@example.com AND (username = alice OR username = carol)
+		rows, err = userRepo.QueryBuilder().
+			Like("email", "@example.com").
+			AndGroup(func(g *repository.QueryBuilder[testModel]) {
+				g.Eq("username", "alice").Or().Eq("username", "carol")
+			}).
+			Find(ctx)
+		assert.NoError(t, err)
+		assert.Len(t, rows, 2)
 	})
 }

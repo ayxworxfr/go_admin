@@ -2,11 +2,11 @@ server:
   port: 8888
 
 database:
-  host: mysql               # Docker容器名称
-  port: 3306
-  user: go_user
-  password: go_user123
-  dbname: go_admin
+  host: mysql               # Docker容器名称；可由 DATABASE_HOST 覆盖
+  port: 3306                # DATABASE_PORT
+  user: go_user             # DATABASE_USER
+  password: ""              # 密钥：DATABASE_PASSWORD（compose/.env 注入）
+  dbname: go_admin          # DATABASE_NAME
   max_idle_conns: 10
   max_open_conns: 100
   conn_max_lifetime: 3600   # 1 hour in seconds
@@ -14,17 +14,21 @@ database:
 
 # Redis配置
 redis:
-  host: redis               # Docker容器名称
-  port: 6379
-  password: ""              # 如需要可设置密码
+  host: redis               # Docker容器名称；REDIS_HOST
+  port: 6379                # REDIS_PORT
+  password: ""              # 密钥：REDIS_PASSWORD（无密码留空）
   db: 0
   pool_size: 10
   min_idle_conns: 5
 
 jwt:
-  secret: scaffold_jwt_secret_key_2024
+  secret: ""                # 密钥：JWT_SECRET（compose/.env 注入，勿写明文）
   access_token_exp: 8h
   refresh_token_exp: 7d
+  # Docker 多副本用 redis 共享撤销名单
+  token_store:
+    driver: redis
+    key_prefix: "go_admin:jwt:revoked:"
 
 logger:
   log_file: "./logs/app.log"

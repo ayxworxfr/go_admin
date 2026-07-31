@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS `user` (
     `id` BIGINT UNSIGNED AUTO_INCREMENT COMMENT '用户ID',
     `username` VARCHAR(50) NOT NULL UNIQUE COMMENT '用户名',
-    `password` VARCHAR(100) NOT NULL COMMENT '密码哈希',
+    `password_hash` VARCHAR(255) NOT NULL COMMENT '密码哈希（Argon2id 自描述串）',
     `email` VARCHAR(100) NOT NULL UNIQUE COMMENT '邮箱',
     `phone` VARCHAR(20) COMMENT '电话',
     `avatar_url` VARCHAR(255) COMMENT '头像URL',

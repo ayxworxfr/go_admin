@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"sync"
 
@@ -12,6 +13,7 @@ import (
 type Config struct {
 	Server        ServerConfig        `yaml:"server"`
 	Database      DatabaseConfig      `yaml:"database"`
+	Redis         RedisConfig         `yaml:"redis"`
 	JWT           JWTConfig           `yaml:"jwt"`
 	Logger        LoggerConfig        `yaml:"logger"`
 	OpenTelemetry OpenTelemetryConfig `yaml:"opentelemetry"`
@@ -46,11 +48,54 @@ func NewDatabaseConfig() DatabaseConfig {
 	}
 }
 
-// JWTConfig 存储 JWT 相关配置
+// RedisConfig 存储 Redis 连接配置（token_store、限流等共享）
+type RedisConfig struct {
+	Host         string `yaml:"host"`
+	Port         int    `yaml:"port"`
+	Password     string `yaml:"password"`
+	DB           int    `yaml:"db"`
+	PoolSize     int    `yaml:"pool_size"`
+	MinIdleConns int    `yaml:"min_idle_conns"`
+}
+
+// NewRedisConfig 带默认值的 Redis 配置
+func NewRedisConfig() RedisConfig {
+	return RedisConfig{
+		Host:         "127.0.0.1",
+		Port:         6379,
+		DB:           0,
+		PoolSize:     10,
+		MinIdleConns: 2,
+	}
+}
+
+// Addr 返回 host:port
+func (c RedisConfig) Addr() string {
+	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
+
+// TokenStoreConfig 令牌撤销存储策略配置（挂在 jwt 下）
+type TokenStoreConfig struct {
+	// Driver: memory（单机）| redis（多实例共享），取值与 tokenstore.Driver* 对齐
+	Driver string `yaml:"driver"`
+	// KeyPrefix Redis 键前缀，仅 redis 驱动使用
+	KeyPrefix string `yaml:"key_prefix"`
+}
+
+// NewTokenStoreConfig 默认使用进程内 memory 驱动
+func NewTokenStoreConfig() TokenStoreConfig {
+	return TokenStoreConfig{
+		Driver:    "memory",
+		KeyPrefix: "go_admin:jwt:revoked:",
+	}
+}
+
+// JWTConfig 存储 JWT 相关配置（签发参数 + 登出撤销策略同属会话生命周期）
 type JWTConfig struct {
-	Secret          string `yaml:"secret"`
-	AccessTokenExp  string `yaml:"access_token_exp"`
-	RefreshTokenExp string `yaml:"refresh_token_exp"`
+	Secret          string           `yaml:"secret"`
+	AccessTokenExp  string           `yaml:"access_token_exp"`
+	RefreshTokenExp string           `yaml:"refresh_token_exp"`
+	TokenStore      TokenStoreConfig `yaml:"token_store"`
 }
 
 // LoggerConfig 存储日志相关配置
@@ -75,20 +120,16 @@ func Load(filename string) (*Config, error) {
 	once.Do(func() {
 		config = &Config{
 			Database:      NewDatabaseConfig(), // 使用带有默认值的 DatabaseConfig
+			Redis:         NewRedisConfig(),
+			JWT:           JWTConfig{TokenStore: NewTokenStoreConfig()},
 			OpenTelemetry: NewOpenTelemetryConfig(),
 		}
 		err = loadFile(filename, config)
-
-		// 优先使用环境变量的值
-		if instanceID := os.Getenv("INSTANCE_ID"); instanceID != "" {
-			config.OpenTelemetry.Service = instanceID
+		if err != nil {
+			return
 		}
-		if endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); endpoint != "" {
-			config.OpenTelemetry.Endpoint = endpoint
-		}
-		if protocol := os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL"); protocol != "" {
-			config.OpenTelemetry.Protocol = protocol
-		}
+		// 环境变量覆盖 YAML（密钥与连接信息以编排/.env 为准）
+		applyEnvOverrides(config)
 	})
 	return config, err
 }

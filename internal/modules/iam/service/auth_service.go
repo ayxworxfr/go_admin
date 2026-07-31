@@ -15,8 +15,8 @@ import (
 )
 
 // AuthService 认证服务：登录、刷新令牌、登出。依赖的都是模块导出的最小接口
-// （user.UserFinder）或同模块内的协作对象（UserRoleService），不再依赖
-// pkg/jwtauth.Instance 这个全局变量。
+// （user.UserFinder）或同模块内的协作对象（UserRoleService），JWT 管理器
+// 通过构造函数注入。
 type AuthService struct {
 	userFinder  usersvc.UserFinder
 	userRoleSvc *UserRoleService

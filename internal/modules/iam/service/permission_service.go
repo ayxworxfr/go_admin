@@ -17,12 +17,12 @@ import (
 // 两者虽然都叫"权限"，但一个是管理台配置操作，一个是每次请求都要走的判断逻辑，
 // 变更频率和性能要求完全不同，这正是拆分的依据。
 type PermissionService struct {
-	permissionRepo pkgrepo.Repository[model.Permission]
+	permissionRepo *pkgrepo.Repository[model.Permission]
 }
 
 // NewPermissionService 创建权限元数据服务
-func NewPermissionService(processor pkgrepo.ORMProcessor) *PermissionService {
-	return &PermissionService{permissionRepo: newRepositories(processor).permission}
+func NewPermissionService(db *pkgrepo.DB) *PermissionService {
+	return &PermissionService{permissionRepo: newRepositories(db).permission}
 }
 
 // CreatePermission 创建权限

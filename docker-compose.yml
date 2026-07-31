@@ -1,3 +1,18 @@
+# =============================================================================
+# go_admin 单实例编排（小生产 / 开发联调）
+# =============================================================================
+# 启动：
+#   cp .env.example .env
+#   docker compose up -d --build
+#
+# 与 conf/common/docker-compose.yml（多实例+Caddy）的区别：
+#   - 单 app，无 Caddy / Prometheus / Grafana
+#   - 单网络，配置更轻
+#   - 密钥同样走 .env → 容器环境变量 → 应用 applyEnvOverrides
+# =============================================================================
+
+name: go_admin
+
 networks:
   go_network:
     driver: bridge
@@ -8,32 +23,39 @@ volumes:
   redis_data:
     driver: local
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   jaeger:
-    image: jaegertracing/all-in-one:1.46
+    image: jaegertracing/all-in-one:1.76.0
+    restart: unless-stopped
+    logging: *default-logging
     ports:
       - "16686:16686" # Jaeger UI
-      - "14250:14250" # gRPC/OTLP 端口
-      - "4317:4317" # OTLP gRPC 端口
-      - "4318:4318" # HTTP/OTLP 端口
+      - "4317:4317" # OTLP gRPC（应用/Collector 直连）
+      - "4318:4318" # OTLP HTTP
     networks:
       - go_network
     environment:
       - TZ=Asia/Shanghai
+      # Jaeger 1.35+ 原生收 OTLP；勿把 OTLP 改绑到 14250（会撞掉旧 Jaeger gRPC）
       - COLLECTOR_OTLP_ENABLED=true
-      - COLLECTOR_OTLP_HOST_PORT=0.0.0.0:14250
-      - COLLECTOR_OTLP_HTTP_HOST_PORT=0.0.0.0:4318
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.84.0
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    restart: unless-stopped
+    logging: *default-logging
     ports:
-      - "43170:4317" # gRPC 端口（可选）
-      - "43180:4318" # ✅ HTTP 端口（本地应用使用）
+      - "43170:4317" # 本机应用 → Collector gRPC（config.yaml: 127.0.0.1:43170）
+      - "43180:4318" # OTLP HTTP 上报（POST /v1/traces，不是浏览器 UI；看链路用 Jaeger :16686）
     networks:
       - go_network
     volumes:
-      - ./conf/common/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml # ✅ 使用官方默认路径
-    # command: ["--config", "/etc/otelcol-contrib/config.yaml"]  # 显式指定配置文件路径
+      - ./conf/common/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
     environment:
       - TZ=Asia/Shanghai
     depends_on:
@@ -43,50 +65,58 @@ services:
   # 数据库服务
   # ----------------------
   mysql:
-    image: mysql:8.0.36 # 固定版本号，避免自动更新导致兼容性问题
+    image: mysql:8.0.41 # 固定版本号，避免自动更新导致兼容性问题
     container_name: go_mysql
     restart: unless-stopped # 非手动停止时自动重启
+    logging: *default-logging
     ports:
       - "3306:3306"
     environment:
       - TZ=Asia/Shanghai # 时区配置（覆盖容器默认时区）
       - LANG=C.UTF-8
-      - MYSQL_ROOT_PASSWORD=123456 # root用户密码（生产环境建议用.env文件管理）
-      - MYSQL_DATABASE=go_admin # 初始化时自动创建的数据库
-      - MYSQL_USER=go_user # 自定义普通用户（避免与root冲突）
-      - MYSQL_PASSWORD=go_user123 # 普通用户密码
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-go_admin}
+      - MYSQL_USER=${MYSQL_USER:-go_user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
       - MYSQL_ROOT_HOST=% # 允许root远程连接（生产环境建议限制IP）
     volumes:
       - mysql_data:/var/lib/mysql # 数据持久化卷（防止容器删除丢失数据）
       - ./mysql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql # 表结构初始化（按序号执行）
       - ./mysql/init_data.sql:/docker-entrypoint-initdb.d/02-init-data.sql # 初始数据（按序号执行）
       - ./mysql/init_user.sql:/docker-entrypoint-initdb.d/03-init_user.sql # 初始化 go_user（自定义权限）
-      - ./conf/common/mysql.cnf:/etc/mysql/conf.d/custom.cnf:ro # 自定义配置（只读权限更安全）
+      # WSL/Windows 绑定时常为 0777，MySQL 会拒绝读取 world-writable conf.d；先挂到 /tmp 再拷贝
+      - ./conf/common/mysql.cnf:/tmp/go_admin_mysql.cnf:ro
+    # 以 0644 安装配置后交给官方 entrypoint
+    entrypoint:
+      - /bin/bash
+      - -ec
+      - |
+        install -m 0644 /tmp/go_admin_mysql.cnf /etc/mysql/conf.d/custom.cnf
+        exec docker-entrypoint.sh "$@"
+      - --
     command:
       # 数据库启动参数（优先级高于配置文件）
+      - mysqld
       - '--character-set-server=utf8mb4' # 全局字符集（支持emoji和多语言）
       - '--collation-server=utf8mb4_unicode_ci' # 全局排序规则（多语言友好）
       - '--sql-mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' # 严格模式+完整规则
     healthcheck:
-      # 安全的健康检查配置
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "--password=${MYSQL_ROOT_PASSWORD}" ] # 用环境变量传密码，避免明文
+      # $$ → 容器内环境变量，勿在 healthcheck 写死密码
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1" ]
       interval: 10s # 每10秒检查一次
       timeout: 5s # 检查超时时间
-      retries: 5 # 连续5次失败视为不健康
-      start_period: 30s # 启动后30秒内不检查（给足初始化时间）
+      retries: 8 # 连续失败视为不健康
+      start_period: 60s # 首次初始化 schema 较慢，给足时间
     networks:
       - go_network # 加入自定义网络，与其他服务隔离通信
-    deploy:
-      # 资源限制（避免占用过多宿主机资源）
-      resources:
-        limits:
-          cpus: '1' # 最多使用1核CPU
-          memory: 1G # 最多使用1GB内存
+    mem_limit: 1g
+    cpus: "1.0"
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: go_redis
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "6379:6379"
     environment:
@@ -103,33 +133,56 @@ services:
       start_period: 10s
     networks:
       - go_network
+    mem_limit: 256m
+
   # ----------------------
   # 应用服务
   # ----------------------
   app:
-    # image: go_admin-app:latest
     build: . # 基于当前目录的 Dockerfile 构建
+    image: go_admin-app:latest
+    restart: unless-stopped
+    logging: *default-logging
     ports:
-      - "8888:8888" # 应用服务端口映射
+      # 改端口：同步改下面 APP_PORT、左侧宿主机映射、healthcheck URL
+      - "${APP_PORT:-8888}:${APP_PORT:-8888}"
     volumes:
-      - ./conf:/app/conf # 挂载配置目录
-      - ./conf/config_docker.yaml:/app/conf/config.yaml # 使用Docker专用配置
-      # - ./internal/handler:/app/internal/handler  # 挂载 handler 目录(注册路由)
+      - ./conf:/app/conf:ro # 挂载配置目录
+      - ./conf/config_docker.yaml:/app/conf/config.yaml:ro # 使用Docker专用配置
       - ./logs:/app/logs # 挂载日志目录
     environment:
       - TZ=Asia/Shanghai
-      - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317 # ✅ 指向 Collector 容器内端口
+      - APP_PORT=${APP_PORT:-8888}
+      - INSTANCE_ID=${INSTANCE_ID:-app}
+      # 密钥与账号：来自 .env，经 applyEnvOverrides 覆盖 yaml
+      - DATABASE_HOST=mysql
+      - DATABASE_PORT=3306
+      - DATABASE_USER=${MYSQL_USER:-go_user}
+      - DATABASE_PASSWORD=${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      - DATABASE_NAME=${MYSQL_DATABASE:-go_admin}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in .env}
+      # 实际以 conf/config_docker.yaml 的 opentelemetry.endpoint 为准（otel-collector:4317）
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
       - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
       - OTEL_METRICS_EXPORTER=otlp
       - OTEL_TRACES_EXPORTER=otlp
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8888/api/hello" ]
-      interval: 30s
+      test: [ "CMD-SHELL", "curl -fsS http://127.0.0.1:$${APP_PORT}/health || exit 1" ]
+      interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 40s
     depends_on:
-      - mysql # 依赖 MySQL 启动
-      - redis # 依赖 Redis 启动
-      - otel-collector # 依赖 Collector 启动
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks:
       - go_network # 加入自定义网络
+    mem_limit: 512m
+    cpus: "1.0"

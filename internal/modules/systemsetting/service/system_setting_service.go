@@ -36,15 +36,15 @@ var coreSettingKeys = map[string]struct{}{
 // 唯一的跨模块依赖是展示 create_by 时需要查一下用户名，通过 user.UserFinder
 // 这个最小接口完成，不直连 user 的仓储。
 type Service struct {
-	repo       pkgrepo.Repository[model.SystemSetting]
+	repo       *pkgrepo.Repository[model.SystemSetting]
 	userFinder usersvc.UserFinder
 }
 
 // NewService 创建系统配置服务。repo 直接调用 pkg/repository 的泛型构造函数
 // 生成，不再单独包一层 internal/repository 子包，理由见 user 模块 NewService 的注释。
-func NewService(processor pkgrepo.ORMProcessor, userFinder usersvc.UserFinder) *Service {
+func NewService(db *pkgrepo.DB, userFinder usersvc.UserFinder) *Service {
 	return &Service{
-		repo:       pkgrepo.NewRepository[model.SystemSetting](processor),
+		repo:       pkgrepo.NewRepository[model.SystemSetting](db),
 		userFinder: userFinder,
 	}
 }

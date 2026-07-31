@@ -17,18 +17,18 @@ import (
 // 编译/测试/复用"，不是看"想不想加一道防线"——多一层目录不会让保护变强，
 // 只会让读者多跳一次文件。
 type repositories struct {
-	role           pkgrepo.Repository[model.Role]
-	permission     pkgrepo.Repository[model.Permission]
-	userRole       pkgrepo.Repository[model.UserRole]
-	rolePermission pkgrepo.Repository[model.RolePermission]
+	role           *pkgrepo.Repository[model.Role]
+	permission     *pkgrepo.Repository[model.Permission]
+	userRole       *pkgrepo.Repository[model.UserRole]
+	rolePermission *pkgrepo.Repository[model.RolePermission]
 }
 
-// newRepositories 基于同一个 ORMProcessor 构造四个仓储实例。
-func newRepositories(processor pkgrepo.ORMProcessor) *repositories {
+// newRepositories 基于同一个 *DB 构造四个仓储实例。
+func newRepositories(db *pkgrepo.DB) *repositories {
 	return &repositories{
-		role:           pkgrepo.NewRepository[model.Role](processor),
-		permission:     pkgrepo.NewRepository[model.Permission](processor),
-		userRole:       pkgrepo.NewRepository[model.UserRole](processor),
-		rolePermission: pkgrepo.NewRepository[model.RolePermission](processor),
+		role:           pkgrepo.NewRepository[model.Role](db),
+		permission:     pkgrepo.NewRepository[model.Permission](db),
+		userRole:       pkgrepo.NewRepository[model.UserRole](db),
+		rolePermission: pkgrepo.NewRepository[model.RolePermission](db),
 	}
 }

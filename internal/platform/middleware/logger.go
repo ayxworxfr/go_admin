@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -13,7 +11,6 @@ import (
 
 	"github.com/ayxworxfr/go_admin/pkg/logger"
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -21,463 +18,333 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultMaxBodyLogBytes = 2 << 10 // 2KiB：日志里够排查，不会拖垮吞吐
+	defaultMaxJSONDepth    = 8
+	defaultMaxFields       = 64 // 单个 query/body 最多保留的字段数，防止超大表单刷爆日志
+	truncatedSuffix        = "...[truncated]"
+)
+
+// LogMiddleware 返回默认配置的访问日志中间件。
 func LogMiddleware() app.HandlerFunc {
-	middleware := NewLogger()
-	return middleware.Logger()
+	return NewLogger().Handle()
 }
 
-// LoggerConfig 配置结构体，用于设置日志中间件参数
+// LoggerConfig 访问日志中间件参数。零值字段由 NewLogger 填默认值。
 type LoggerConfig struct {
-	MaxInlineSize   int    // 直接内联记录的最大字节数
-	MaxTotalSize    int    // 最大解析大小
-	MaxValueSize    int    // 单个值的最大大小
-	MaxFields       int    // 最大字段数量
-	MaxDepth        int    // 最大嵌套深度
-	TruncatedSuffix string // 截断值的后缀标识
+	// MaxBodyLogBytes 请求/响应体写入日志的最大字节数（截断前）
+	MaxBodyLogBytes int
+	// SensitiveFields 命中（子串、忽略大小写）的 JSON/表单字段名将被脱敏
 	SensitiveFields []string
+	// SkipPaths 完全跳过访问日志的路径（如健康检查）
+	SkipPaths []string
 }
 
-// LoggerMiddleware 日志中间件结构体
+// LoggerMiddleware 访问日志中间件。
 type LoggerMiddleware struct {
-	config LoggerConfig
+	config          LoggerConfig
+	sensitiveSubstr []string
+	skipPaths       map[string]struct{}
 }
 
-// NewLogger 创建一个新的日志中间件实例
+// loggedRequest 结构化请求快照，写入访问日志的 request 字段。
+type loggedRequest struct {
+	Query map[string]string `json:"query,omitempty"`
+	Body  any               `json:"body,omitempty"`
+}
+
+// NewLogger 创建日志中间件；未提供配置时使用生产向默认值。
 func NewLogger(config ...LoggerConfig) *LoggerMiddleware {
-	// 设置默认配置
 	cfg := LoggerConfig{
-		MaxInlineSize:   1024 * 100,
-		MaxTotalSize:    1024 * 1024,
-		MaxValueSize:    1024 * 32,
-		MaxFields:       1000,
-		MaxDepth:        64,
-		TruncatedSuffix: "[TRUNCATED]",
-		SensitiveFields: []string{"password", "token", "secret", "credit_card", "ssn"},
+		MaxBodyLogBytes: defaultMaxBodyLogBytes,
+		SensitiveFields: []string{"password", "token", "secret", "authorization", "credit_card", "ssn"},
+		SkipPaths:       []string{"/health", "/metrics"},
 	}
-
-	// 如果提供了配置，则覆盖默认值
 	if len(config) > 0 {
-		userCfg := config[0]
-		if userCfg.MaxInlineSize > 0 {
-			cfg.MaxInlineSize = userCfg.MaxInlineSize
+		user := config[0]
+		if user.MaxBodyLogBytes > 0 {
+			cfg.MaxBodyLogBytes = user.MaxBodyLogBytes
 		}
-		if userCfg.MaxTotalSize > 0 {
-			cfg.MaxTotalSize = userCfg.MaxTotalSize
+		if len(user.SensitiveFields) > 0 {
+			cfg.SensitiveFields = user.SensitiveFields
 		}
-		if userCfg.MaxValueSize > 0 {
-			cfg.MaxValueSize = userCfg.MaxValueSize
-		}
-		if userCfg.MaxFields > 0 {
-			cfg.MaxFields = userCfg.MaxFields
-		}
-		if userCfg.MaxDepth > 0 {
-			cfg.MaxDepth = userCfg.MaxDepth
-		}
-		if userCfg.TruncatedSuffix != "" {
-			cfg.TruncatedSuffix = userCfg.TruncatedSuffix
-		}
-		if len(userCfg.SensitiveFields) > 0 {
-			cfg.SensitiveFields = userCfg.SensitiveFields
+		if user.SkipPaths != nil {
+			cfg.SkipPaths = user.SkipPaths
 		}
 	}
 
-	return &LoggerMiddleware{config: cfg}
+	skip := make(map[string]struct{}, len(cfg.SkipPaths))
+	for _, p := range cfg.SkipPaths {
+		skip[p] = struct{}{}
+	}
+	sensitive := make([]string, len(cfg.SensitiveFields))
+	for i, f := range cfg.SensitiveFields {
+		sensitive[i] = strings.ToLower(f)
+	}
+
+	return &LoggerMiddleware{
+		config:          cfg,
+		sensitiveSubstr: sensitive,
+		skipPaths:       skip,
+	}
 }
 
-// Logger 实现中间件接口，返回Hertz处理函数
-func (l *LoggerMiddleware) Logger() app.HandlerFunc {
+// Handle 记录单次访问日志：Next 之前抓取请求参数，之后写一行（含 query/body）。
+func (l *LoggerMiddleware) Handle() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
-		start := time.Now()
-		path := string(c.Request.URI().Path())
-		method := string(c.Request.Method())
-
-		// 获取当前span
-		span := trace.SpanFromContext(ctx)
-		spanContext := span.SpanContext()
-
-		// 提取并记录请求参数（根据需要调整，敏感参数可过滤）
-		requestParams := l.extractRequestParams(c)
-		if len(requestParams) > 0 {
-			span.SetAttributes(attribute.String("http.request.params", fmt.Sprintf("%v", requestParams)))
+		path := string(c.Request.URI().PathOriginal())
+		if _, skip := l.skipPaths[path]; skip {
+			c.Next(ctx)
+			return
 		}
 
-		// 基础日志字段
-		logFields := []zap.Field{
-			zap.String("trace_id", spanContext.TraceID().String()),
-			zap.String("span_id", spanContext.SpanID().String()),
+		start := time.Now()
+		method := string(c.Request.Method())
+		// 必须在 Next 之前抓取：后续中间件/handler 可能消费或改写 body 视图
+		reqSnapshot := l.captureRequest(c)
+
+		c.Next(ctx)
+
+		latency := time.Since(start)
+		statusCode := c.Response.StatusCode()
+		span := trace.SpanFromContext(ctx)
+		spanCtx := span.SpanContext()
+
+		fields := []zap.Field{
+			zap.String("trace_id", spanCtx.TraceID().String()),
+			zap.String("span_id", spanCtx.SpanID().String()),
 			zap.String("method", method),
 			zap.String("path", path),
-			zap.String("client_ip", l.getClientIP(c)),
-			zap.String("user_agent", l.getUserAgent(c)),
-			zap.Int64("request_size_bytes", l.getRequestSize(c)),
-		}
-		requestFields := append(logFields, zap.Any("request_body", requestParams))
-		// 记录请求开始
-		logger.Info(ctx, "Request started", requestFields...)
-
-		// 创建管道(有彩蛋)
-		pr, pw := io.Pipe()
-		buf := &bytes.Buffer{}
-
-		// 启动goroutine读取管道数据
-		go func() {
-			// 延迟关闭pr（确保读取完成）
-			defer pr.Close()
-			_, err := io.Copy(buf, pr)
-			if err != nil && err != io.ErrClosedPipe {
-				logger.Error(ctx, "Failed to copy response body", zap.Error(err))
-			}
-		}()
-		// 设置Hertz将响应体写入pr
-		c.Response.SetBodyStream(pr, -1)
-
-		// 处理请求
-		c.Next(ctx)
-		// 请求处理完成后关闭pw（触发管道关闭）
-		pw.Close()
-
-		end := time.Now()
-		latency := end.Sub(start)
-		statusCode := c.Response.StatusCode()
-
-		// 响应体记录
-		rsp := l.parseResponse(c)
-		// 更新日志字段
-		logFields = append(logFields,
 			zap.Int("status", statusCode),
 			zap.Duration("latency", latency),
-			zap.Int64("response_size_bytes", l.getResponseSize(c)),
-			zap.String("response_body", rsp),
-		)
-
-		// 设置span状态
+			zap.String("client_ip", clientIP(c)),
+			zap.String("user_agent", string(c.Request.Header.UserAgent())),
+			zap.Int("request_size", len(c.Request.Body())),
+			zap.Int("response_size", len(c.Response.Body())),
+		}
+		if reqSnapshot != nil {
+			fields = append(fields, zap.Any("request", reqSnapshot))
+		}
+		// 错误响应才带 body，避免成功路径把大段 JSON 打进日志
 		if statusCode >= consts.StatusBadRequest {
-			span.SetStatus(codes.Error, http.StatusText(statusCode))
-			logger.Warn(ctx, "Request completed with error", logFields...)
-		} else {
-			span.SetStatus(codes.Ok, "")
-			logger.Info(ctx, "Request completed successfully", logFields...)
+			if rsp := l.truncateBytes(c.Response.Body()); rsp != "" {
+				fields = append(fields, zap.String("response_body", rsp))
+			}
 		}
 
-		span.SetAttributes(attribute.String("http.response.body", rsp))
-		// 添加详细的span事件
-		span.AddEvent("request_completed", trace.WithAttributes(
+		if statusCode >= consts.StatusBadRequest {
+			span.SetStatus(codes.Error, http.StatusText(statusCode))
+			logger.Warn(ctx, "HTTP request", fields...)
+		} else {
+			span.SetStatus(codes.Ok, "")
+			logger.Info(ctx, "HTTP request", fields...)
+		}
+
+		span.SetAttributes(
 			attribute.Int("http.status_code", statusCode),
 			attribute.Int64("http.latency_ms", latency.Milliseconds()),
-			attribute.Int64("http.request.size", l.getRequestSize(c)),
-			attribute.Int64("http.response.size", l.getResponseSize(c)),
-			attribute.String("http.client_ip", l.getClientIP(c)),
-			attribute.String("http.user_agent", l.getUserAgent(c)),
-		))
+			attribute.Int("http.request_size", len(c.Request.Body())),
+			attribute.Int("http.response_size", len(c.Response.Body())),
+		)
 	}
 }
 
-// 从请求头获取客户端IP
-func (l *LoggerMiddleware) getClientIP(c *app.RequestContext) string {
-	// 尝试从常见的代理头获取客户端IP
-	if xff := c.Request.Header.Get("X-Forwarded-For"); xff != "" {
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
+// captureRequest 提取可观测的请求快照：query + body（已脱敏/截断）。
+func (l *LoggerMiddleware) captureRequest(c *app.RequestContext) *loggedRequest {
+	query := l.captureQuery(c)
+	body := l.captureBody(c)
+	if query == nil && body == nil {
+		return nil
+	}
+	return &loggedRequest{Query: query, Body: body}
+}
+
+func (l *LoggerMiddleware) captureQuery(c *app.RequestContext) map[string]string {
+	if c.QueryArgs().Len() == 0 {
+		return nil
+	}
+	out := make(map[string]string)
+	count := 0
+	c.QueryArgs().VisitAll(func(key, value []byte) {
+		if count >= defaultMaxFields {
+			return
 		}
+		k := string(key)
+		if l.isSensitive(k) {
+			out[k] = "****"
+		} else {
+			out[k] = l.truncateString(string(value))
+		}
+		count++
+	})
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (l *LoggerMiddleware) captureBody(c *app.RequestContext) any {
+	body := c.Request.Body()
+	if len(body) == 0 {
+		return nil
 	}
 
-	// 尝试从X-Real-IP获取
+	contentType := string(c.Request.Header.ContentType())
+	switch {
+	case strings.Contains(contentType, "application/json"):
+		return l.captureJSONBody(body)
+	case strings.Contains(contentType, "application/x-www-form-urlencoded"):
+		return l.captureFormBody(body)
+	default:
+		// 无 Content-Type 时也尝试按 JSON 解析——常见客户端漏带头
+		if trimmed := bytes.TrimSpace(body); len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+			if parsed := l.captureJSONBody(body); parsed != nil {
+				return parsed
+			}
+		}
+		return l.truncateBytes(body)
+	}
+}
+
+func (l *LoggerMiddleware) captureJSONBody(body []byte) any {
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 {
+		return nil
+	}
+
+	var data any
+	if err := json.Unmarshal(body, &data); err != nil {
+		return l.truncateBytes(body)
+	}
+
+	redacted := l.redactValue(data, 0)
+	if l.exceedsBudget(redacted) {
+		raw, err := json.Marshal(redacted)
+		if err != nil {
+			return l.truncateBytes(body)
+		}
+		return l.truncateBytes(raw)
+	}
+	return redacted
+}
+
+func (l *LoggerMiddleware) captureFormBody(body []byte) map[string]string {
+	raw := string(body)
+	if raw == "" {
+		return nil
+	}
+	out := make(map[string]string)
+	pairs := strings.Split(raw, "&")
+	for i, pair := range pairs {
+		if i >= defaultMaxFields {
+			out["_truncated_fields"] = truncatedSuffix
+			break
+		}
+		key, val, ok := strings.Cut(pair, "=")
+		if !ok {
+			continue
+		}
+		if key == "" {
+			continue
+		}
+		if l.isSensitive(key) {
+			out[key] = "****"
+			continue
+		}
+		out[key] = l.truncateString(val)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (l *LoggerMiddleware) redactValue(v any, depth int) any {
+	if depth > defaultMaxJSONDepth {
+		return "[max_depth]"
+	}
+	switch x := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		count := 0
+		for k, val := range x {
+			if count >= defaultMaxFields {
+				out["_truncated_fields"] = truncatedSuffix
+				break
+			}
+			if l.isSensitive(k) {
+				out[k] = "****"
+			} else {
+				out[k] = l.redactValue(val, depth+1)
+			}
+			count++
+		}
+		return out
+	case []any:
+		limit := len(x)
+		if limit > defaultMaxFields {
+			limit = defaultMaxFields
+		}
+		out := make([]any, limit)
+		for i := 0; i < limit; i++ {
+			out[i] = l.redactValue(x[i], depth+1)
+		}
+		return out
+	case string:
+		return l.truncateString(x)
+	default:
+		return v
+	}
+}
+
+func (l *LoggerMiddleware) isSensitive(key string) bool {
+	lower := strings.ToLower(key)
+	for _, s := range l.sensitiveSubstr {
+		if strings.Contains(lower, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func (l *LoggerMiddleware) exceedsBudget(v any) bool {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return true
+	}
+	return len(raw) > l.config.MaxBodyLogBytes
+}
+
+func (l *LoggerMiddleware) truncateBytes(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	if len(b) <= l.config.MaxBodyLogBytes {
+		return string(b)
+	}
+	return string(b[:l.config.MaxBodyLogBytes]) + truncatedSuffix
+}
+
+func (l *LoggerMiddleware) truncateString(s string) string {
+	if len(s) <= l.config.MaxBodyLogBytes {
+		return s
+	}
+	return s[:l.config.MaxBodyLogBytes] + truncatedSuffix
+}
+
+func clientIP(c *app.RequestContext) string {
+	if xff := c.Request.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
 	if xri := c.Request.Header.Get("X-Real-IP"); xri != "" {
 		return xri
 	}
-
-	// 从RemoteAddr解析
 	remoteAddr := c.RemoteAddr().String()
 	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
 		return host
 	}
 	return remoteAddr
-}
-
-// 获取请求大小（字节）
-func (l *LoggerMiddleware) getRequestSize(c *app.RequestContext) int64 {
-	if c.Request.Body() == nil {
-		return 0
-	}
-	return int64(len(c.Request.Body()))
-}
-
-// 获取响应大小（字节）
-func (l *LoggerMiddleware) getResponseSize(c *app.RequestContext) int64 {
-	if c.Response.Body() == nil {
-		return 0
-	}
-	return int64(len(c.Response.Body()))
-}
-
-// 获取用户代理
-func (l *LoggerMiddleware) getUserAgent(c *app.RequestContext) string {
-	return string(c.Request.Header.UserAgent())
-}
-
-func (l *LoggerMiddleware) parseResponse(c *app.RequestContext) string {
-	if c.Response.Body() == nil {
-		return ""
-	}
-
-	if len(c.Response.Body()) <= l.config.MaxInlineSize {
-		return string(c.Response.Body())
-	}
-
-	// 如果响应体较大，截断并记录
-	return string(c.Response.Body()[:l.config.MaxInlineSize]) + l.config.TruncatedSuffix
-}
-
-// 提取请求参数（支持大对象截断）
-func (l *LoggerMiddleware) extractRequestParams(c *app.RequestContext) map[string]string {
-	params := make(map[string]string)
-
-	// 敏感字段检查函数
-	isSensitiveField := func(key string) bool {
-		for _, field := range l.config.SensitiveFields {
-			if strings.Contains(strings.ToLower(key), field) {
-				return true
-			}
-		}
-		return false
-	}
-
-	// 检查并设置参数（支持截断）
-	checkAndSetParam := func(key string, value []byte, truncated bool) {
-		if _, ok := params[key]; !ok {
-			if isSensitiveField(key) {
-				params[key] = "****"
-				return
-			}
-
-			if truncated {
-				params[key] = string(value) + l.config.TruncatedSuffix
-			} else {
-				params[key] = string(value)
-			}
-		}
-	}
-
-	// 1. 获取查询参数
-	c.QueryArgs().VisitAll(func(key, value []byte) {
-		keyStr := string(key)
-		checkAndSetParam(keyStr, value, false)
-	})
-
-	contentType := string(c.Request.Header.Get("Content-Type"))
-
-	// 2. 处理JSON请求体
-	if strings.Contains(contentType, "application/json") && len(c.Request.Body()) > 0 {
-		body := c.Request.Body()
-
-		// 小型请求体直接解析
-		if len(body) <= l.config.MaxInlineSize {
-			var jsonData map[string]any
-			if err := json.Unmarshal(body, &jsonData); err != nil {
-				hlog.Warnf("Failed to parse small JSON body: %v", err)
-				params["_json_parse_error"] = err.Error()
-			} else {
-				for k, v := range jsonData {
-					// 将值转换为字符串并处理截断
-					var valStr string
-					var truncated bool
-
-					switch v := v.(type) {
-					case string:
-						if len(v) > l.config.MaxValueSize {
-							valStr = v[:l.config.MaxValueSize]
-							truncated = true
-						} else {
-							valStr = v
-						}
-					default:
-						// 非字符串类型使用默认格式
-						valStr = fmt.Sprintf("%v", v)
-					}
-
-					checkAndSetParam(k, []byte(valStr), truncated)
-				}
-			}
-			return params
-		}
-
-		// 大型请求体使用流式解析
-		bodyReader := bytes.NewReader(body)
-		limitedReader := io.LimitReader(bodyReader, int64(l.config.MaxTotalSize+1))
-		decoder := json.NewDecoder(limitedReader)
-		decoder.UseNumber() // 避免大数字精度丢失
-
-		// 验证是否为对象
-		token, err := decoder.Token()
-		if err != nil {
-			hlog.Warnf("Failed to parse JSON token: %v", err)
-			params["_json_parse_error"] = err.Error()
-			return params
-		}
-
-		if delim, ok := token.(json.Delim); !ok || delim != '{' {
-			hlog.Warnf("JSON is not an object (got %T: %v)", token, token)
-			params["_json_not_object"] = fmt.Sprintf("%v", token)
-			return params
-		}
-
-		// 逐字段解析（使用栈跟踪嵌套深度）
-		fieldCount := 0
-		depth := 0
-
-		for decoder.More() {
-			if depth > l.config.MaxDepth {
-				hlog.Warnf("JSON nesting too deep: %d (max %d)", depth, l.config.MaxDepth)
-				params["_nesting_too_deep"] = fmt.Sprintf("%d", depth)
-				break
-			}
-
-			// 读取键
-			keyToken, err := decoder.Token()
-			if err != nil {
-				hlog.Warnf("Failed to read JSON key: %v", err)
-				break
-			}
-
-			keyStr, ok := keyToken.(string)
-			if !ok {
-				hlog.Warnf("JSON key is not a string: %T", keyToken)
-				continue
-			}
-
-			// 增加字段计数
-			fieldCount++
-			if fieldCount > l.config.MaxFields {
-				hlog.Warnf("JSON has too many fields: %d (max %d)", fieldCount, l.config.MaxFields)
-				params["_too_many_fields"] = fmt.Sprintf("%d", fieldCount)
-				break
-			}
-
-			// 处理值（支持嵌套结构）
-			var valueBuf bytes.Buffer
-			encoder := json.NewEncoder(&valueBuf)
-			encoder.SetEscapeHTML(false) // 保留原始特殊字符
-
-			// 跟踪嵌套结构
-			if err := l.decodeValueWithTruncation(decoder, &valueBuf, l.config.MaxValueSize, &depth); err != nil {
-				hlog.Warnf("Failed to decode value for key %s: %v", keyStr, err)
-				params[keyStr] = "[DECODE_ERROR]"
-				continue
-			}
-
-			// 检查是否超过最大大小
-			if bodyReader.Len() > l.config.MaxTotalSize {
-				hlog.Warnf("JSON body exceeded max size: %d bytes", l.config.MaxTotalSize)
-				params["_body_too_large"] = fmt.Sprintf("%d bytes", l.config.MaxTotalSize)
-				break
-			}
-
-			// 检查值是否被截断
-			truncated := valueBuf.Len() >= l.config.MaxValueSize
-			checkAndSetParam(keyStr, valueBuf.Bytes(), truncated)
-		}
-
-		// 检查是否有未读取的尾部数据
-		if _, err := decoder.Token(); err != io.EOF {
-			hlog.Warnf("JSON parsing incomplete: %v", err)
-			params["_json_incomplete"] = "true"
-		}
-	}
-
-	return params
-}
-
-// 递归解码JSON值并在超过大小时截断
-func (l *LoggerMiddleware) decodeValueWithTruncation(decoder *json.Decoder, buf *bytes.Buffer, maxSize int, depth *int) error {
-	// 增加深度计数
-	(*depth)++
-	defer func() { (*depth)-- }() // 函数结束时减少深度
-
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-
-	// 处理不同类型的token
-	switch token := token.(type) {
-	case json.Delim:
-		// 对象或数组开始
-		if token == '{' {
-			buf.WriteByte('{')
-			first := true
-
-			for decoder.More() {
-				// 检查是否超过最大大小
-				if buf.Len() >= maxSize {
-					buf.WriteString("...}")
-					return nil
-				}
-
-				if !first {
-					buf.WriteByte(',')
-				}
-				first = false
-
-				// 写入键
-				key, err := decoder.Token()
-				if err != nil {
-					return err
-				}
-
-				// 键需要加引号
-				json.NewEncoder(buf).Encode(key)
-				buf.WriteByte(':')
-
-				// 递归处理值
-				if err := l.decodeValueWithTruncation(decoder, buf, maxSize, depth); err != nil {
-					return err
-				}
-			}
-
-			// 读取结束符 '}'
-			if _, err := decoder.Token(); err != nil {
-				return err
-			}
-			buf.WriteByte('}')
-
-		} else if token == '[' {
-			buf.WriteByte('[')
-			first := true
-
-			for decoder.More() {
-				// 检查是否超过最大大小
-				if buf.Len() >= maxSize {
-					buf.WriteString("...]")
-					return nil
-				}
-
-				if !first {
-					buf.WriteByte(',')
-				}
-				first = false
-
-				// 递归处理值
-				if err := l.decodeValueWithTruncation(decoder, buf, maxSize, depth); err != nil {
-					return err
-				}
-			}
-
-			// 读取结束符 ']'
-			if _, err := decoder.Token(); err != nil {
-				return err
-			}
-			buf.WriteByte(']')
-		}
-
-	case string:
-		// 字符串值需要加引号
-		json.NewEncoder(buf).Encode(token)
-
-	default:
-		// 其他类型（数字、布尔、null）直接写入
-		buf.WriteString(fmt.Sprintf("%v", token))
-	}
-
-	return nil
 }
