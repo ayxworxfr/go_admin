@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/ayxworxfr/go_admin/pkg/api"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
 )
 
 // Method HTTP 方法
@@ -98,7 +98,7 @@ func (r *Register) RegisterRouters(group *RouterGroup, routers ...*Router) {
 }
 
 // RegisterStruct 扫描结构体导出方法并注册处理器。
-// 方法须以 *reqctx.Context 为第一个参数（接收器之后）。
+// 方法须以 *api.Context 为第一个参数（接收器之后）。
 func (r *Register) RegisterStruct(group *RouterGroup, instances ...any) {
 	for _, instance := range instances {
 		r.registerStruct(group, instance)
@@ -181,13 +181,13 @@ func (r *Register) mount(group *RouterGroup, rt *Router) {
 }
 
 // isHandlerMethod 判断是否为业务处理器：
-// func (h *T) Xxx(c *reqctx.Context, ...) —— In(0)=recv, In(1)=*Context
+// func (h *T) Xxx(c *api.Context, ...) —— In(0)=recv, In(1)=*Context
 func isHandlerMethod(method reflect.Method) bool {
 	t := method.Type
 	if t.NumIn() < 2 {
 		return false
 	}
-	return t.In(1) == reflect.TypeOf((*reqctx.Context)(nil))
+	return t.In(1) == reflect.TypeOf((*api.Context)(nil))
 }
 
 func inferFromName(funcName string, strategy PathFormat) (Method, string) {

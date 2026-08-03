@@ -6,17 +6,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alibaba/sentinel-golang/api"
+	sentinelapi "github.com/alibaba/sentinel-golang/api"
 	"github.com/alibaba/sentinel-golang/core/base"
 	"github.com/alibaba/sentinel-golang/core/circuitbreaker"
 	sconfig "github.com/alibaba/sentinel-golang/core/config"
 	"github.com/alibaba/sentinel-golang/core/flow"
 	"github.com/alibaba/sentinel-golang/logging"
 	"github.com/ayxworxfr/go_admin/internal/platform/config"
+	"github.com/ayxworxfr/go_admin/pkg/api"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
 	"github.com/cloudwego/hertz/pkg/app"
-	"go.uber.org/zap"
 )
 
 var SentinelInstance *Sentinel
@@ -26,7 +25,7 @@ func SentinelMiddleware() app.HandlerFunc {
 }
 
 func InitSentinel(configPath string) error {
-	instance, err := NewSentinelMiddleware(configPath, logger.Instance)
+	instance, err := NewSentinelMiddleware(configPath)
 	if err != nil {
 		return err
 	}
@@ -39,11 +38,10 @@ type Sentinel struct {
 	configManager *config.ConfigManager
 	resourceMap   map[string]string // 路径到资源名的映射
 	mutex         sync.RWMutex
-	logger        *zap.Logger
 }
 
 // NewSentinelMiddleware 创建新的Sentinel中间件
-func NewSentinelMiddleware(configPath string, logger *zap.Logger) (*Sentinel, error) {
+func NewSentinelMiddleware(configPath string) (*Sentinel, error) {
 	configManager, err := config.NewConfigManager(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config manager: %w", err)
@@ -52,7 +50,6 @@ func NewSentinelMiddleware(configPath string, logger *zap.Logger) (*Sentinel, er
 	mw := &Sentinel{
 		configManager: configManager,
 		resourceMap:   make(map[string]string),
-		logger:        logger,
 	}
 
 	// 初始化Sentinel
@@ -103,9 +100,9 @@ func (mw *Sentinel) initSentinel() error {
 	}
 
 	// 设置自定义日志
-	logging.ResetGlobalLogger(&SentinelLogger{logger: mw.logger})
+	logging.ResetGlobalLogger(NewSentinelLogger())
 
-	return api.InitWithConfig(sentinelConfig)
+	return sentinelapi.InitWithConfig(sentinelConfig)
 }
 
 // loadRules 加载Sentinel规则
@@ -151,7 +148,7 @@ func (mw *Sentinel) loadRules() error {
 		return fmt.Errorf("failed to load circuit breaker rules: %w", err)
 	}
 
-	mw.logger.Sugar().Debugf("Successfully loaded %d flow rules and %d circuit breaker rules", len(flowRules), len(cbRules))
+	logger.Debugf(context.Background(), "Successfully loaded %d flow rules and %d circuit breaker rules", len(flowRules), len(cbRules))
 	return nil
 }
 
@@ -162,7 +159,7 @@ func (mw *Sentinel) refreshRulesPeriodically(interval time.Duration) {
 
 	for range ticker.C {
 		if err := mw.loadRules(); err != nil {
-			mw.logger.Sugar().Errorf("Failed to refresh Sentinel rules: %v", err)
+			logger.Errorf(context.Background(), "Failed to refresh Sentinel rules: %v", err)
 		}
 	}
 }
@@ -186,20 +183,19 @@ func (mw *Sentinel) Middleware() app.HandlerFunc {
 		}
 
 		// 进入Sentinel保护
-		entry, blockErr := api.Entry(
+		entry, blockErr := sentinelapi.Entry(
 			resourceName,
-			api.WithTrafficType(base.Inbound),
-			api.WithArgs(c),
+			sentinelapi.WithTrafficType(base.Inbound),
+			sentinelapi.WithArgs(c),
 		)
 
 		if blockErr != nil {
 			// 请求被限流或熔断
 			mw.handleBlockedRequest(c, resourceName, blockErr)
-			logFields := []zap.Field{
-				zap.String("resource", resourceName),
-				zap.String("reason", blockErr.BlockType().String()),
-			}
-			logger.Warn(ctx, "Request blocked by Sentinel", logFields...)
+			logger.Warn(ctx, "Request blocked by Sentinel",
+				logger.String("resource", resourceName),
+				logger.String("reason", blockErr.BlockType().String()),
+			)
 			return
 		}
 
@@ -223,7 +219,7 @@ func (SentinelInstance *Sentinel) matchResource(path string) (string, bool) {
 // handleBlockedRequest 处理被拦截的请求
 func (mw *Sentinel) handleBlockedRequest(c *app.RequestContext, resourceName string, blockErr *base.BlockError) {
 	// 记录被拦截的请求
-	mw.logger.Sugar().Warnf("Request blocked for resource: %s, reason: %s", resourceName, blockErr.BlockType().String())
+	logger.Warnf(context.Background(), "Request blocked for resource: %s, reason: %s", resourceName, blockErr.BlockType().String())
 
-	reqctx.Abort(c, reqctx.RateLimit("Too many requests, please try again later"))
+	api.Abort(c, api.RateLimit("Too many requests, please try again later"))
 }

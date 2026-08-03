@@ -48,7 +48,7 @@ internal/
         └── service/system_setting_service.go  # repo 字段同样直接 pkgrepo.NewRepository 构造
 ```
 
-`pkg/` 保持技术基础设施定位，不按模块拆：`jwtauth`（JWT 编解码）、`crypter`（密码哈希/加密策略）、`logger`、`repository`（泛型 ORM 引擎）、`cron`、`httpclient`、`utils`、`reqctx`（请求上下文与统一响应结构）、`apiparam`（分页等跨模块共享的请求 DTO 片段）。这些包本身不含业务语义，任何模块都可以直接依赖，不需要经过窄接口转发。
+`pkg/` 保持技术基础设施定位，不按模块拆：`jwtauth`（JWT 编解码）、`crypter`（密码哈希/加密策略）、`logger`、`repository`（泛型 ORM 引擎）、`cron`、`httpclient`、`utils`、`api`（请求上下文与统一响应结构）、`apiparam`（分页等跨模块共享的请求 DTO 片段）。这些包本身不含业务语义，任何模块都可以直接依赖，不需要经过窄接口转发。
 
 ## 2. 仓储封装
 
@@ -179,4 +179,4 @@ func (c *Container) Models() []any {
 
 `Container` 构造完成后，`bootstrap/routes.go`：用 `Container` 字段构造各模块 Handler → 交给 `App.SetupRoutes`；`JWTAuthMiddleware` 同样构造注入 `checker`/`tokenStore`。`cmd/main.go` 只调用 `bootstrap.Run`。
 
-当前用户身份从请求上下文的 `jwtauth.ClaimsKey` 读取（`reqctx.Context.Claims` / `UserID`），**不再有** `jwtauth.Instance` 全局单例。新场景一律走构造注入或 `reqctx`。
+当前用户身份从请求上下文的 `jwtauth.ClaimsKey` 读取（`api.Context.Claims` / `UserID`），**不再有** `jwtauth.Instance` 全局单例。新场景一律走构造注入或 `api`。

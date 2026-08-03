@@ -9,7 +9,6 @@ import (
 	pkgrepo "github.com/ayxworxfr/go_admin/pkg/repository"
 	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // PermissionService 权限元数据管理服务：只做 Permission 的 CRUD，
@@ -33,7 +32,7 @@ func (s *PermissionService) CreatePermission(ctx context.Context, req *dto.Creat
 	}
 
 	if err := s.permissionRepo.Create(ctx, &permission); err != nil {
-		logger.Error(ctx, "Failed to create permission", zap.Error(err))
+		logger.Error(ctx, "Failed to create permission", logger.Err(err))
 		return nil, errors.Wrap(err, "failed to create permission")
 	}
 
@@ -52,7 +51,7 @@ func (s *PermissionService) CreatePermissions(ctx context.Context, req *dto.Crea
 	}
 
 	if err := s.permissionRepo.BatchCreate(ctx, permissions); err != nil {
-		logger.Error(ctx, "Failed to create permissions", zap.Error(err))
+		logger.Error(ctx, "Failed to create permissions", logger.Err(err))
 		return errors.Wrap(err, "failed to create permissions")
 	}
 	return nil
@@ -62,7 +61,7 @@ func (s *PermissionService) CreatePermissions(ctx context.Context, req *dto.Crea
 func (s *PermissionService) UpdatePermission(ctx context.Context, req *dto.UpdatePermissionRequest) (*dto.PermissionResponse, error) {
 	permission, err := s.permissionRepo.FindByID(ctx, req.ID)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve permission", zap.Error(err), zap.Uint64("permission_id", req.ID))
+		logger.Error(ctx, "Failed to retrieve permission", logger.Err(err), logger.Uint64("permission_id", req.ID))
 		return nil, errors.Wrap(err, "failed to retrieve permission")
 	}
 
@@ -71,7 +70,7 @@ func (s *PermissionService) UpdatePermission(ctx context.Context, req *dto.Updat
 	}
 
 	if err := s.permissionRepo.Update(ctx, permission); err != nil {
-		logger.Error(ctx, "Failed to update permission", zap.Error(err), zap.Uint64("permission_id", req.ID))
+		logger.Error(ctx, "Failed to update permission", logger.Err(err), logger.Uint64("permission_id", req.ID))
 		return nil, errors.Wrap(err, "failed to update permission")
 	}
 
@@ -89,7 +88,7 @@ func (s *PermissionService) DeletePermissionBatch(ctx context.Context, ids []uin
 	}
 	err := s.permissionRepo.QueryBuilder().In("id", ids).Delete(ctx)
 	if err != nil {
-		logger.Error(ctx, "Failed to delete permissions", zap.Error(err), zap.Uint64s("permission_ids", ids))
+		logger.Error(ctx, "Failed to delete permissions", logger.Err(err), logger.Uint64s("permission_ids", ids))
 		return errors.Wrap(err, "failed to delete permissions")
 	}
 	return nil
@@ -99,7 +98,7 @@ func (s *PermissionService) DeletePermissionBatch(ctx context.Context, ids []uin
 func (s *PermissionService) GetPermission(ctx context.Context, id uint64) (*dto.PermissionResponse, error) {
 	permission, err := s.permissionRepo.FindByID(ctx, id)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve permission", zap.Error(err), zap.Uint64("permission_id", id))
+		logger.Error(ctx, "Failed to retrieve permission", logger.Err(err), logger.Uint64("permission_id", id))
 		return nil, errors.Wrap(err, "failed to retrieve permission")
 	}
 
@@ -114,7 +113,7 @@ func (s *PermissionService) GetPermission(ctx context.Context, id uint64) (*dto.
 func (s *PermissionService) GetPermissionList(ctx context.Context, req *dto.GetPermissionListRequest) ([]*dto.PermissionResponse, int64, error) {
 	permissions, total, err := s.permissionRepo.FindPage(ctx, req, req.Limit, req.Offset)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve permissions", zap.Error(err))
+		logger.Error(ctx, "Failed to retrieve permissions", logger.Err(err))
 		return nil, 0, errors.Wrap(err, "failed to retrieve permissions")
 	}
 

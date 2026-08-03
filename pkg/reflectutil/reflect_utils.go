@@ -1,4 +1,7 @@
-package utils
+// Package reflectutil 封装基于反射的方法调用能力：支持超时、重试、异步、
+// 批量调用，以及方法调用器缓存。适用于需要按方法名动态分发调用的场景
+// （如插件式任务分发、通用对象方法代理），常规业务逻辑应优先使用静态类型调用。
+package reflectutil
 
 import (
 	"context"
@@ -41,10 +44,18 @@ func NewMethodInvoker(structPtr any, methodName string) (*MethodInvoker, error) 
 	}, nil
 }
 
-// Invoke 调用方法
+// Invoke 调用方法。
+//
+// 当 args 中某个实参为 nil 时（例如向可选的指针/接口类型参数传 nil），
+// 会按目标方法对应形参的类型构造零值 reflect.Value，而不是直接对 nil
+// 做 reflect.ValueOf——后者得到的是无效零值，Call 时会直接 panic。
 func (invoker *MethodInvoker) Invoke(args ...any) ([]reflect.Value, error) {
 	in := make([]reflect.Value, len(args))
 	for i, arg := range args {
+		if arg == nil && i < invoker.methodType.NumIn() {
+			in[i] = reflect.Zero(invoker.methodType.In(i))
+			continue
+		}
 		in[i] = reflect.ValueOf(arg)
 	}
 
@@ -190,9 +201,13 @@ func (cache *MethodCache) GetOrCreateMethodInvoker(structPtr any, methodName str
 	return invoker, nil
 }
 
-// ClearCache 清空缓存
+// ClearCache 清空缓存。
+//
+// 使用 sync.Map.Clear() 原地清空，而不是用 cache.cache = sync.Map{} 整体替换字段——
+// 后者是对结构体字段的裸写操作，与并发进行中的 Load/Store 之间没有任何同步关系，
+// 在 -race 下会被判定为数据竞争。
 func (cache *MethodCache) ClearCache() {
-	cache.cache = sync.Map{}
+	cache.cache.Clear()
 }
 
 // MethodProxy 动态代理

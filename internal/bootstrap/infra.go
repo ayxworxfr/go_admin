@@ -7,10 +7,9 @@ import (
 	platformcron "github.com/ayxworxfr/go_admin/internal/platform/cron"
 	"github.com/ayxworxfr/go_admin/internal/platform/middleware/sentinel"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
-	"github.com/ayxworxfr/go_admin/pkg/utils"
+	"github.com/ayxworxfr/go_admin/pkg/pathutil"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // registerInfra 注册启动/退出钩子：cron 失败即阻断启动；
@@ -40,8 +39,8 @@ func initCronTask(app *myapp.App) error {
 }
 
 func initSentinel(ctx context.Context) {
-	configPath := utils.GetAbsPath("conf/sentinel.yaml")
+	configPath := pathutil.AbsPath("conf/sentinel.yaml")
 	if err := sentinel.InitSentinel(configPath); err != nil {
-		logger.Error(ctx, "Failed to initialize sentinel", zap.Error(err))
+		logger.Error(ctx, "Failed to initialize sentinel", logger.Err(err))
 	}
 }

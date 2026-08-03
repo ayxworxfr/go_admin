@@ -1,4 +1,4 @@
-package reqctx
+package api
 
 import (
 	"fmt"
@@ -38,7 +38,7 @@ func (rsp *Response) HTTPStatus() int {
 	}
 }
 
-// Write 将响应写入 reqctx.Context（handler 返回路径）
+// Write 将响应写入 api.Context（handler 返回路径）
 func (rsp *Response) Write(ctx *Context) {
 	ctx.JSON(rsp.HTTPStatus(), rsp)
 }

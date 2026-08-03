@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // 配置类型常量，与前端约定的枚举保持一致
@@ -67,12 +66,12 @@ func (s *Service) Create(ctx context.Context, req *dto.CreateSystemSettingReques
 		CreateBy:    createBy,
 	}
 	if err := s.repo.Create(ctx, setting); err != nil {
-		logger.Error(ctx, "Failed to create system setting", zap.Error(err))
+		logger.Error(ctx, "Failed to create system setting", logger.Err(err))
 		return nil, errors.Wrap(err, "failed to create system setting")
 	}
 
 	logger.Info(ctx, "System setting created successfully",
-		zap.Uint64("setting_id", setting.ID), zap.String("key", setting.Key), zap.String("category", setting.Category))
+		logger.Uint64("setting_id", setting.ID), logger.String("key", setting.Key), logger.String("category", setting.Category))
 	return s.toResponse(ctx, setting)
 }
 
@@ -97,11 +96,11 @@ func (s *Service) Update(ctx context.Context, req *dto.UpdateSystemSettingReques
 	}
 
 	if err := s.repo.Update(ctx, setting); err != nil {
-		logger.Error(ctx, "Failed to update system setting", zap.Error(err))
+		logger.Error(ctx, "Failed to update system setting", logger.Err(err))
 		return nil, errors.Wrap(err, "failed to update system setting")
 	}
 
-	logger.Info(ctx, "System setting updated successfully", zap.Uint64("setting_id", setting.ID), zap.String("key", setting.Key))
+	logger.Info(ctx, "System setting updated successfully", logger.Uint64("setting_id", setting.ID), logger.String("key", setting.Key))
 	return s.toResponse(ctx, setting)
 }
 

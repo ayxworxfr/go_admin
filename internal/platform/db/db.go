@@ -9,7 +9,6 @@ import (
 	"github.com/ayxworxfr/go_admin/internal/platform/config"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
 	"github.com/hashicorp/go-multierror"
-	"go.uber.org/zap"
 	"xorm.io/xorm"
 	"xorm.io/xorm/log"
 )
@@ -70,7 +69,7 @@ func SyncModels(engine *xorm.Engine, models []any, dropTables, interactive bool)
 
 		for i := len(models) - 1; i >= 0; i-- {
 			tableName := engine.TableName(models[i])
-			logger.Info(ctx, "Dropping table", zap.String("table", tableName))
+			logger.Info(ctx, "Dropping table", logger.String("table", tableName))
 			if _, err := engine.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", tableName)); err != nil {
 				result = multierror.Append(result, fmt.Errorf("failed to drop table %s: %w", tableName, err))
 			}
@@ -79,14 +78,14 @@ func SyncModels(engine *xorm.Engine, models []any, dropTables, interactive bool)
 
 	for _, model := range models {
 		tableName := engine.TableName(model)
-		logger.Info(ctx, "Syncing table schema", zap.String("table", tableName))
+		logger.Info(ctx, "Syncing table schema", logger.String("table", tableName))
 		if err := engine.Sync2(model); err != nil {
 			result = multierror.Append(result, fmt.Errorf("failed to sync table %s: %w", tableName, err))
 		}
 	}
 
 	if result != nil {
-		logger.Error(ctx, "Schema sync finished with errors", zap.Error(result))
+		logger.Error(ctx, "Schema sync finished with errors", logger.Err(result))
 		return result
 	}
 

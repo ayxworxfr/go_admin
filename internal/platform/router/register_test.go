@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ayxworxfr/go_admin/internal/platform/routegen"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
+	"github.com/ayxworxfr/go_admin/pkg/api"
 	_ "github.com/ayxworxfr/go_admin/pkg/tests"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,13 +20,13 @@ const testRouterPkg = "github.com/ayxworxfr/go_admin/internal/platform/router"
 type MockHandler struct{}
 
 // @route POST /login
-func (h *MockHandler) Login(ctx *reqctx.Context) {}
+func (h *MockHandler) Login(ctx *api.Context) {}
 
 // @route GET /refresh
-func (h *MockHandler) RefreshToken(ctx *reqctx.Context) {}
+func (h *MockHandler) RefreshToken(ctx *api.Context) {}
 
 // InternalMethod 无编译表条目，应按函数名推断注册。
-func (h *MockHandler) InternalMethod(ctx *reqctx.Context) {}
+func (h *MockHandler) InternalMethod(ctx *api.Context) {}
 
 func init() {
 	registerCompiledRoute(testRouterPkg, "MockHandler", "Login", POST, "/login")

@@ -21,33 +21,11 @@ func ClaimsFromContext(c *app.RequestContext) (*Claims, error) {
 	return typed, nil
 }
 
-// UserInfoFromContext 从请求上下文提取用户信息。
-func UserInfoFromContext(c *app.RequestContext) (*UserInfo, error) {
-	claims, err := ClaimsFromContext(c)
-	if err != nil {
-		return nil, err
-	}
-	return &UserInfo{
-		UserID:   claims.Identity,
-		Username: claims.Nice,
-		RoleKey:  claims.RoleKey,
-	}, nil
-}
-
-// UserIDFromContext 从请求上下文获取用户 ID 字符串。
-func UserIDFromContext(c *app.RequestContext) (string, error) {
-	claims, err := ClaimsFromContext(c)
-	if err != nil {
-		return "", err
-	}
-	return claims.Identity, nil
-}
-
 // UserIDUint64FromContext 从请求上下文获取用户 ID（uint64）。
 func UserIDUint64FromContext(c *app.RequestContext) (uint64, error) {
-	userID, err := UserIDFromContext(c)
+	claims, err := ClaimsFromContext(c)
 	if err != nil {
 		return 0, err
 	}
-	return strconv.ParseUint(userID, 10, 64)
+	return strconv.ParseUint(claims.Identity, 10, 64)
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/ayxworxfr/go_admin/internal/modules/user/dto"
 	"github.com/ayxworxfr/go_admin/internal/modules/user/model"
 	"github.com/ayxworxfr/go_admin/internal/modules/user/service"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
+	"github.com/ayxworxfr/go_admin/pkg/api"
 	"github.com/jinzhu/copier"
 )
 
@@ -45,7 +45,7 @@ func toUserResponse(u *model.User) (*dto.UserResponse, error) {
 }
 
 // @route Get /user
-func (h *Handler) GetUser(c *reqctx.Context, req *dto.GetUserRequest) *reqctx.Response {
+func (h *Handler) GetUser(c *api.Context, req *dto.GetUserRequest) *api.Response {
 	var (
 		u   *model.User
 		err error
@@ -56,97 +56,97 @@ func (h *Handler) GetUser(c *reqctx.Context, req *dto.GetUserRequest) *reqctx.Re
 	case req.Username != "":
 		u, err = h.svc.FindByUsername(c.Context(), req.Username)
 	default:
-		return reqctx.ParamError("id or username is required")
+		return api.ParamError("id or username is required")
 	}
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 
 	resp, err := toUserResponse(u)
 	if err != nil {
-		return reqctx.InternalError(err)
+		return api.InternalError(err)
 	}
-	return reqctx.Success(resp)
+	return api.Success(resp)
 }
 
 // @route Post /user
-func (h *Handler) CreateUser(c *reqctx.Context, req *dto.CreateUserRequest) *reqctx.Response {
+func (h *Handler) CreateUser(c *api.Context, req *dto.CreateUserRequest) *api.Response {
 	u, err := h.svc.Create(c.Context(), req)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 
 	if err := h.roleAssigner.AssignRoles(c.Context(), u.ID, req.RoleIDs); err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 
 	resp, err := toUserResponse(u)
 	if err != nil {
-		return reqctx.InternalError(err)
+		return api.InternalError(err)
 	}
-	return reqctx.Success(resp)
+	return api.Success(resp)
 }
 
 // @route Put /user
-func (h *Handler) UpdateUser(c *reqctx.Context, req *dto.UpdateUserRequest) *reqctx.Response {
+func (h *Handler) UpdateUser(c *api.Context, req *dto.UpdateUserRequest) *api.Response {
 	u, err := h.svc.Update(c.Context(), req)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 
 	if req.RoleIDs != nil {
 		if err := h.roleAssigner.AssignRoles(c.Context(), u.ID, *req.RoleIDs); err != nil {
-			return reqctx.DatabaseError(err)
+			return api.DatabaseError(err)
 		}
 	}
 
 	resp, err := toUserResponse(u)
 	if err != nil {
-		return reqctx.InternalError(err)
+		return api.InternalError(err)
 	}
-	return reqctx.Success(resp)
+	return api.Success(resp)
 }
 
 // @route Get /user/list
-func (h *Handler) GetUserList(c *reqctx.Context, req *dto.GetUserListRequest) *reqctx.Response {
+func (h *Handler) GetUserList(c *api.Context, req *dto.GetUserListRequest) *api.Response {
 	data, total, err := h.svc.List(c.Context(), req)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 
 	voList := make([]*dto.UserResponse, 0, len(data))
 	for i := range data {
 		resp, err := toUserResponse(&data[i])
 		if err != nil {
-			return reqctx.InternalError(err)
+			return api.InternalError(err)
 		}
 		voList = append(voList, resp)
 	}
-	return reqctx.PageSuccess(voList, total)
+	return api.PageSuccess(voList, total)
 }
 
 // @route Delete /user
-func (h *Handler) DeleteUser(c *reqctx.Context, req *dto.DeleteUserRequest) *reqctx.Response {
+func (h *Handler) DeleteUser(c *api.Context, req *dto.DeleteUserRequest) *api.Response {
 	if err := h.svc.DeleteUsers(c.Context(), req.IDs); err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
-	return reqctx.NoContent()
+	return api.NoContent()
 }
 
 // @route Get /user/routes
-func (h *Handler) GetUserRoutes(c *reqctx.Context) *reqctx.Response {
+func (h *Handler) GetUserRoutes(c *api.Context) *api.Response {
 	claims, err := c.Claims()
 	if err != nil {
-		return reqctx.Unauthorized("Invalid token")
+		return api.Unauthorized("Invalid token")
 	}
 	userID, err := c.UserID()
 	if err != nil {
-		return reqctx.Unauthorized("Invalid token")
+		return api.Unauthorized("Invalid token")
 	}
 
 	permissionPaths, err := h.permResolver.GetUserPermissionPaths(c.Context(), userID)
 	if err != nil {
-		return reqctx.InternalError(err)
+		return api.InternalError(err)
 	}
 
 	result := &dto.UserRoutes{
@@ -154,14 +154,14 @@ func (h *Handler) GetUserRoutes(c *reqctx.Context) *reqctx.Response {
 		Role:     claims.RoleKey,
 		Routes:   permissionPaths,
 	}
-	return reqctx.Success(result)
+	return api.Success(result)
 }
 
 // @route Get /user/current
-func (h *Handler) GetUserCurrent(c *reqctx.Context) *reqctx.Response {
+func (h *Handler) GetUserCurrent(c *api.Context) *api.Response {
 	claims, err := c.Claims()
 	if err != nil {
-		return reqctx.Unauthorized("Invalid token")
+		return api.Unauthorized("Invalid token")
 	}
 	result := map[string]any{
 		"name":   claims.Nice,
@@ -170,5 +170,5 @@ func (h *Handler) GetUserCurrent(c *reqctx.Context) *reqctx.Response {
 		"email":  "antdesign@alipay.com",
 		"access": claims.RoleKey,
 	}
-	return reqctx.Success(result)
+	return api.Success(result)
 }

@@ -1,9 +1,10 @@
-package reqctx
+package api
 
 import (
 	"context"
 	"strings"
 
+	"github.com/ayxworxfr/go_admin/pkg/constant"
 	"github.com/ayxworxfr/go_admin/pkg/jwtauth"
 	"github.com/cloudwego/hertz/pkg/app"
 )
@@ -64,12 +65,21 @@ func (c *Context) BindAndValidate(obj any) error {
 
 // BearerToken 提取 Authorization: Bearer <token>；无 Bearer 前缀时原样返回，空则 ""
 func (c *Context) BearerToken() string {
-	raw := strings.TrimSpace(c.Header("Authorization"))
+	return StripBearerPrefix(c.Header(constant.HeaderAuthorization))
+}
+
+// StripBearerPrefix 从原始 Authorization 头值中剥离 Bearer 前缀（大小写不敏感，
+// 按 RFC 7235 认证方案名不区分大小写）；没有该前缀时原样返回 trim 过空白的字符串。
+//
+// 提取成独立函数是为了让还拿不到 *Context 的地方（例如鉴权中间件在校验通过、
+// 注入 Claims 之前）也能复用同一份解析逻辑，避免出现两份可能行为分叉的实现。
+func StripBearerPrefix(raw string) string {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""
 	}
-	if len(raw) > 7 && strings.EqualFold(raw[:7], "Bearer ") {
-		return strings.TrimSpace(raw[7:])
+	if len(raw) > len(constant.BearerPrefix) && strings.EqualFold(raw[:len(constant.BearerPrefix)], constant.BearerPrefix) {
+		return strings.TrimSpace(raw[len(constant.BearerPrefix):])
 	}
 	return raw
 }

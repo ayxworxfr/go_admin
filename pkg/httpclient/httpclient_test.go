@@ -4,66 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strconv"
+	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/ayxworxfr/go_admin/pkg/httpclient"
 )
-
-func TestNewClient(t *testing.T) {
-	client := httpclient.NewClient("https://api.example.com")
-	if client.BaseURL != "https://api.example.com" {
-		t.Errorf("BaseURL mismatch, got: %s, want: %s", client.BaseURL, "https://api.example.com")
-	}
-	if client.HTTPClient.Timeout != 30*time.Second {
-		t.Errorf("Timeout mismatch, got: %v, want: %v", client.HTTPClient.Timeout, 30*time.Second)
-	}
-	if client.Retries != 3 {
-		t.Errorf("Retries mismatch, got: %d, want: %d", client.Retries, 3)
-	}
-	if client.Backoff != 500*time.Millisecond {
-		t.Errorf("Backoff mismatch, got: %v, want: %v", client.Backoff, 500*time.Millisecond)
-	}
-}
-
-func TestClient_WithOptions(t *testing.T) {
-	client := httpclient.NewClient(
-		"https://api.example.com",
-		httpclient.WithTimeout(15*time.Second),
-		httpclient.WithRetries(5),
-		httpclient.WithBackoff(200*time.Millisecond),
-		httpclient.WithHeader("X-App-ID", "test-app"),
-	)
-
-	if client.HTTPClient.Timeout != 15*time.Second {
-		t.Errorf("Timeout mismatch, got: %v, want: %v", client.HTTPClient.Timeout, 15*time.Second)
-	}
-	if client.Retries != 5 {
-		t.Errorf("Retries mismatch, got: %d, want: %d", client.Retries, 5)
-	}
-	if client.Backoff != 200*time.Millisecond {
-		t.Errorf("Backoff mismatch, got: %v, want: %v", client.Backoff, 200*time.Millisecond)
-	}
-	if client.Headers["X-App-ID"] != "test-app" {
-		t.Errorf("Header mismatch, got: %s, want: %s", client.Headers["X-App-ID"], "test-app")
-	}
-}
-
-func TestClient_SetHeader(t *testing.T) {
-	client := httpclient.NewClient("https://api.example.com")
-	client.SetHeader("Authorization", "Bearer token123")
-
-	if client.Headers["Authorization"] != "Bearer token123" {
-		t.Errorf("Header not set correctly, got: %s, want: %s", client.Headers["Authorization"], "Bearer token123")
-	}
-}
 
 func TestClient_Get(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -138,13 +92,116 @@ func TestClient_Post(t *testing.T) {
 	}
 }
 
+func TestClient_Put(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("Method mismatch, got: %s, want: %s", r.Method, http.MethodPut)
+		}
+		body, _ := io.ReadAll(r.Body)
+		if string(body) != `{"key":"updated"}` {
+			t.Errorf("Request body mismatch, got: %s", string(body))
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	client := httpclient.NewClient(ts.URL)
+	resp, err := client.Put(context.Background(), "/test", map[string]string{"key": "updated"})
+	if err != nil {
+		t.Fatalf("Put() error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Status code mismatch, got: %d, want: %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestClient_Delete(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("Method mismatch, got: %s, want: %s", r.Method, http.MethodDelete)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer ts.Close()
+
+	client := httpclient.NewClient(ts.URL)
+	resp, err := client.Delete(context.Background(), "/test")
+	if err != nil {
+		t.Fatalf("Delete() error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("Status code mismatch, got: %d, want: %d", resp.StatusCode, http.StatusNoContent)
+	}
+}
+
+func TestClient_SetHeader(t *testing.T) {
+	var gotAuth string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	client := httpclient.NewClient(ts.URL)
+	client.SetHeader("Authorization", "Bearer token123")
+
+	resp, err := client.Get(context.Background(), "/test", nil)
+	if err != nil {
+		t.Fatalf("Get() error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotAuth != "Bearer token123" {
+		t.Errorf("Header not applied, got: %s, want: %s", gotAuth, "Bearer token123")
+	}
+}
+
+func TestClient_WithHeaderOption(t *testing.T) {
+	var gotAppID string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAppID = r.Header.Get("X-App-ID")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	client := httpclient.NewClient(ts.URL, httpclient.WithHeader("X-App-ID", "test-app"))
+	resp, err := client.Get(context.Background(), "/test", nil)
+	if err != nil {
+		t.Fatalf("Get() error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotAppID != "test-app" {
+		t.Errorf("Header not applied, got: %s, want: %s", gotAppID, "test-app")
+	}
+}
+
+func TestClient_WithTimeout(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	client := httpclient.NewClient(ts.URL, httpclient.WithTimeout(10*time.Millisecond), httpclient.WithRetries(0))
+
+	_, err := client.Get(context.Background(), "/test", nil)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+}
+
 func TestClient_GetJSON(t *testing.T) {
 	tests := []struct {
 		name           string
 		statusCode     int
 		responseBody   string
 		expectedError  error
-		expectedResult any
+		expectedResult map[string]any
 	}{
 		{
 			name:         "success",
@@ -153,7 +210,7 @@ func TestClient_GetJSON(t *testing.T) {
 			expectedResult: map[string]any{
 				"message": "success",
 				"data": map[string]any{
-					"id": 1,
+					"id": float64(1),
 				},
 			},
 		},
@@ -186,7 +243,7 @@ func TestClient_GetJSON(t *testing.T) {
 			defer ts.Close()
 
 			client := httpclient.NewClient(ts.URL)
-			var result any
+			var result map[string]any
 
 			err := client.GetJSON(context.Background(), "/test", nil, &result)
 
@@ -194,7 +251,7 @@ func TestClient_GetJSON(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error: %v, got nil", tt.expectedError)
 				}
-				if !strings.Contains(err.Error(), tt.expectedError.Error()) {
+				if !errors.Is(err, tt.expectedError) {
 					t.Fatalf("expected error: %v, got: %v", tt.expectedError, err)
 				}
 				return
@@ -203,37 +260,42 @@ func TestClient_GetJSON(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetJSON() error: %v", err)
 			}
-
-			// 统一使用map进行比较
-			resultMap, ok := result.(map[string]any)
-			if !ok {
-				t.Fatalf("result is not a map, got: %T", result)
-			}
-
-			expectedMap, ok := tt.expectedResult.(map[string]any)
-			if !ok && tt.expectedResult != nil {
-				t.Fatalf("expectedResult is not a map, got: %T", tt.expectedResult)
-			}
-
-			if resultMap["message"] != expectedMap["message"] {
-				t.Errorf("result mismatch, got: %v, want: %v", resultMap, expectedMap)
+			if !reflect.DeepEqual(result, tt.expectedResult) {
+				t.Errorf("result mismatch, got: %v, want: %v", result, tt.expectedResult)
 			}
 		})
 	}
 }
 
+func TestClient_PostJSON(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"echo": "ok"}`))
+	}))
+	defer ts.Close()
+
+	client := httpclient.NewClient(ts.URL)
+	var result struct {
+		Echo string `json:"echo"`
+	}
+	if err := client.PostJSON(context.Background(), "/test", map[string]string{"a": "b"}, &result); err != nil {
+		t.Fatalf("PostJSON() error: %v", err)
+	}
+	if result.Echo != "ok" {
+		t.Errorf("unexpected result: %+v", result)
+	}
+}
+
 func TestClient_Retry(t *testing.T) {
-	var callCount int
+	var callCount int32
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
-		t.Logf("Request count: %d", callCount) // 增加日志输出
-		if callCount <= 2 {
-			// 前两次请求返回500错误
+		n := atomic.AddInt32(&callCount, 1)
+		if n <= 2 {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error": "server error"}`)) // 增加错误响应体
+			w.Write([]byte(`{"error": "server error"}`))
+			return
 		}
-
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"message": "success"}`))
 	}))
@@ -241,8 +303,8 @@ func TestClient_Retry(t *testing.T) {
 
 	client := httpclient.NewClient(
 		ts.URL,
-		httpclient.WithRetries(3), // 重试3次
-		httpclient.WithBackoff(100*time.Millisecond), // 增加退避时间
+		httpclient.WithRetries(3),
+		httpclient.WithBackoff(10*time.Millisecond),
 	)
 
 	var result struct {
@@ -251,17 +313,82 @@ func TestClient_Retry(t *testing.T) {
 
 	err := client.GetJSON(context.Background(), "/test", nil, &result)
 	if err != nil {
-		// 输出详细错误信息
-		respBody, _ := json.Marshal(result)
-		t.Fatalf("GetJSON() error: %v, response: %s", err, respBody)
+		t.Fatalf("GetJSON() error: %v", err)
 	}
 
-	if callCount != 3 {
-		t.Errorf("unexpected call count, got: %d, want: %d", callCount, 3)
+	if got := atomic.LoadInt32(&callCount); got != 3 {
+		t.Errorf("unexpected call count, got: %d, want: %d", got, 3)
 	}
-
 	if result.Message != "success" {
 		t.Errorf("unexpected result, got: %s, want: %s", result.Message, "success")
+	}
+}
+
+// TestClient_Retry_ReplaysRequestBody 验证请求体在重试之间被正确重放：
+// 老实现直接复用同一个 *http.Request，Body 在首次尝试后被 Transport 消费，
+// 第二次尝试会发出空 body。这里第一次请求返回 500 触发重试，
+// 断言服务端两次都收到了完整的请求体。
+func TestClient_Retry_ReplaysRequestBody(t *testing.T) {
+	var callCount int32
+	var receivedBodies []string
+	var mu sync.Mutex
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		receivedBodies = append(receivedBodies, string(body))
+		mu.Unlock()
+
+		n := atomic.AddInt32(&callCount, 1)
+		if n == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	client := httpclient.NewClient(ts.URL, httpclient.WithRetries(1), httpclient.WithBackoff(5*time.Millisecond))
+
+	resp, err := client.Post(context.Background(), "/test", strings.NewReader("payload"))
+	if err != nil {
+		t.Fatalf("Post() error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(receivedBodies) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(receivedBodies))
+	}
+	for i, b := range receivedBodies {
+		if b != "payload" {
+			t.Errorf("request #%d: expected body %q, got %q", i+1, "payload", b)
+		}
+	}
+}
+
+// TestClient_RetryExhausted 验证重试次数耗尽后返回 nil 响应与非空错误，
+// 而不是像老实现那样返回一个 body 已被关闭的 *http.Response。
+func TestClient_RetryExhausted(t *testing.T) {
+	var callCount int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&callCount, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	client := httpclient.NewClient(ts.URL, httpclient.WithRetries(2), httpclient.WithBackoff(5*time.Millisecond))
+
+	resp, err := client.Get(context.Background(), "/test", nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if resp != nil {
+		t.Fatalf("expected nil response, got: %v", resp)
+	}
+	if got := atomic.LoadInt32(&callCount); got != 3 {
+		t.Errorf("unexpected call count, got: %d, want: %d", got, 3)
 	}
 }
 
@@ -273,15 +400,13 @@ func TestClient_Request_InvalidURL(t *testing.T) {
 		t.Fatalf("expected error, got nil")
 	}
 
-	// 检查是否为URL解析错误
 	var urlErr *url.Error
 	if !errors.As(err, &urlErr) {
 		t.Fatalf("expected url.Error, got: %T %v", err, err)
 	}
 
-	// 检查错误信息是否包含"invalid URL"
 	if !strings.Contains(err.Error(), "invalid-url") {
-		t.Fatalf("expected error containing 'invalid URL', got: %v", err)
+		t.Fatalf("expected error containing 'invalid-url', got: %v", err)
 	}
 
 	if resp != nil {
@@ -292,18 +417,16 @@ func TestClient_Request_InvalidURL(t *testing.T) {
 func TestClient_Request_ContextCanceled(t *testing.T) {
 	client := httpclient.NewClient("https://api.example.com")
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // 立即取消上下文
+	cancel()
 
 	resp, err := client.Get(ctx, "/test", nil)
 
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-
 	if !strings.Contains(err.Error(), "context canceled") {
 		t.Fatalf("expected context canceled error, got: %v", err)
 	}
-
 	if resp != nil {
 		t.Fatalf("expected nil response, got: %v", resp)
 	}
@@ -315,7 +438,6 @@ func TestClient_Request_WithReaderBody(t *testing.T) {
 		if string(body) != "test-body" {
 			t.Errorf("Request body mismatch, got: %s, want: %s", string(body), "test-body")
 		}
-
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -334,38 +456,105 @@ func TestClient_Request_WithReaderBody(t *testing.T) {
 	}
 }
 
+func TestClient_ConcurrentSetHeaderAndRequest(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	client := httpclient.NewClient(ts.URL)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			client.SetHeader("X-Seq", "value")
+		}(i)
+	}
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resp, err := client.Get(context.Background(), "/test", nil)
+			if err != nil {
+				t.Errorf("Get() error: %v", err)
+				return
+			}
+			resp.Body.Close()
+		}()
+	}
+	wg.Wait()
+}
+
 func TestIsRetriableError(t *testing.T) {
 	tests := []struct {
+		name      string
 		err       error
 		wantRetry bool
 	}{
 		{
+			name:      "nil",
 			err:       nil,
 			wantRetry: false,
 		},
 		{
-			err:       fmt.Errorf("connection refused"),
+			name:      "dial refused",
+			err:       &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")},
 			wantRetry: true,
 		},
 		{
-			err:       fmt.Errorf("timeout"),
+			name:      "read reset",
+			err:       &net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset by peer")},
 			wantRetry: true,
 		},
 		{
-			err:       fmt.Errorf("TLS handshake timeout"),
+			name:      "dns lookup failure is not retriable",
+			err:       &net.OpError{Op: "lookup", Net: "tcp", Err: errors.New("no such host")},
+			wantRetry: false,
+		},
+		{
+			name:      "context deadline exceeded",
+			err:       context.DeadlineExceeded,
 			wantRetry: true,
 		},
 		{
-			err:       fmt.Errorf("invalid request"),
+			name:      "context canceled",
+			err:       context.Canceled,
+			wantRetry: false,
+		},
+		{
+			name:      "plain error",
+			err:       errors.New("invalid request"),
 			wantRetry: false,
 		},
 	}
 
 	for _, tt := range tests {
-		t.Run(strconv.FormatBool(tt.wantRetry), func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			if got := httpclient.IsRetriableError(tt.err); got != tt.wantRetry {
 				t.Errorf("IsRetriableError() = %v, want %v", got, tt.wantRetry)
 			}
 		})
+	}
+}
+
+func TestClient_JSONEncoding(t *testing.T) {
+	// 确认结构体作为响应值时也能正确处理（覆盖非 map 场景）。
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]int{"count": 3})
+	}))
+	defer ts.Close()
+
+	client := httpclient.NewClient(ts.URL)
+	var result struct {
+		Count int `json:"count"`
+	}
+	if err := client.GetJSON(context.Background(), "/test", nil, &result); err != nil {
+		t.Fatalf("GetJSON() error: %v", err)
+	}
+	if result.Count != 3 {
+		t.Errorf("unexpected count: %d", result.Count)
 	}
 }

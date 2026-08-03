@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 )
 
 const (
@@ -110,25 +109,25 @@ func (l *LoggerMiddleware) Handle() app.HandlerFunc {
 		span := trace.SpanFromContext(ctx)
 		spanCtx := span.SpanContext()
 
-		fields := []zap.Field{
-			zap.String("trace_id", spanCtx.TraceID().String()),
-			zap.String("span_id", spanCtx.SpanID().String()),
-			zap.String("method", method),
-			zap.String("path", path),
-			zap.Int("status", statusCode),
-			zap.Duration("latency", latency),
-			zap.String("client_ip", clientIP(c)),
-			zap.String("user_agent", string(c.Request.Header.UserAgent())),
-			zap.Int("request_size", len(c.Request.Body())),
-			zap.Int("response_size", len(c.Response.Body())),
+		fields := []logger.Field{
+			logger.String("trace_id", spanCtx.TraceID().String()),
+			logger.String("span_id", spanCtx.SpanID().String()),
+			logger.String("method", method),
+			logger.String("path", path),
+			logger.Int("status", statusCode),
+			logger.Duration("latency", latency),
+			logger.String("client_ip", clientIP(c)),
+			logger.String("user_agent", string(c.Request.Header.UserAgent())),
+			logger.Int("request_size", len(c.Request.Body())),
+			logger.Int("response_size", len(c.Response.Body())),
 		}
 		if reqSnapshot != nil {
-			fields = append(fields, zap.Any("request", reqSnapshot))
+			fields = append(fields, logger.Any("request", reqSnapshot))
 		}
 		// 错误响应才带 body，避免成功路径把大段 JSON 打进日志
 		if statusCode >= consts.StatusBadRequest {
 			if rsp := l.truncateBytes(c.Response.Body()); rsp != "" {
-				fields = append(fields, zap.String("response_body", rsp))
+				fields = append(fields, logger.String("response_body", rsp))
 			}
 		}
 

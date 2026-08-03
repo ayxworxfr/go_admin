@@ -6,7 +6,7 @@ import (
 	"github.com/ayxworxfr/go_admin/internal/bootstrap"
 	"github.com/ayxworxfr/go_admin/internal/platform/config"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
-	"github.com/ayxworxfr/go_admin/pkg/utils"
+	"github.com/ayxworxfr/go_admin/pkg/pathutil"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -20,7 +20,7 @@ func main() {
 }
 
 func loadConfig() *config.Config {
-	configPath := utils.GetAbsPath("conf/config.yaml")
+	configPath := pathutil.AbsPath("conf/config.yaml")
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to load config: %v", err))

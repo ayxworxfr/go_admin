@@ -53,7 +53,7 @@ func NewContainer(engine *xorm.Engine, hasher crypter.PasswordHasher, jwt *jwtau
 	permCache := iamcache.NewInMemoryCache(permissionCacheTTL)
 	checker := iamservice.NewPermissionChecker(userRoleSvc, roleSvc, permCache)
 
-	authSvc := iamservice.NewAuthService(userSvc, userRoleSvc, tokenStore, jwt)
+	authSvc := iamservice.NewAuthService(userSvc, userSvc, userRoleSvc, tokenStore, jwt)
 
 	ssSvc := ssservice.NewService(db, userSvc)
 

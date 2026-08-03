@@ -11,7 +11,6 @@ import (
 	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
-	"go.uber.org/zap"
 )
 
 // UserRoleService 负责"用户拥有哪些角色"这一件事：分配、查询、以及为登录/
@@ -38,7 +37,7 @@ func NewUserRoleService(db *pkgrepo.DB, roleSvc *RoleService, userFinder usersvc
 // AssignRoles 为用户分配角色（先确认用户存在，再做增量分配）
 func (s *UserRoleService) AssignRoles(ctx context.Context, userID uint64, roleIDs []uint64) error {
 	if _, err := s.userFinder.FindByID(ctx, userID); err != nil {
-		logger.Error(ctx, "Failed to retrieve user", zap.Error(err), zap.Uint64("user_id", userID))
+		logger.Error(ctx, "Failed to retrieve user", logger.Err(err), logger.Uint64("user_id", userID))
 		return errors.Wrap(err, "failed to retrieve user")
 	}
 	return s.assignUserRoles(ctx, userID, roleIDs)
@@ -111,7 +110,7 @@ func (s *UserRoleService) RetrieveRoleResponsesByUserID(ctx context.Context, use
 	for i, role := range roles {
 		permissions, err := s.roleSvc.RetrievePermissionByRoleID(ctx, role.ID)
 		if err != nil {
-			logger.Error(ctx, "Failed to retrieve role permissions", zap.Error(err), zap.Uint64("role_id", role.ID))
+			logger.Error(ctx, "Failed to retrieve role permissions", logger.Err(err), logger.Uint64("role_id", role.ID))
 			return nil, errors.Wrap(err, "failed to retrieve role permissions")
 		}
 		if err := copier.Copy(&result[i].Permissions, &permissions); err != nil {
@@ -126,13 +125,13 @@ func (s *UserRoleService) RetrieveRoleResponsesByUserID(ctx context.Context, use
 func (s *UserRoleService) GetUserRoles(ctx context.Context, userID uint64, flags int) (*dto.UserRolesResponse, error) {
 	user, err := s.userFinder.FindByID(ctx, userID)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve user", zap.Error(err), zap.Uint64("user_id", userID))
+		logger.Error(ctx, "Failed to retrieve user", logger.Err(err), logger.Uint64("user_id", userID))
 		return nil, errors.Wrap(err, "failed to retrieve user")
 	}
 
 	roles, err := s.RetrieveRoleResponsesByUserID(ctx, userID, flags)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve user roles", zap.Error(err), zap.Uint64("user_id", userID))
+		logger.Error(ctx, "Failed to retrieve user roles", logger.Err(err), logger.Uint64("user_id", userID))
 		return nil, errors.Wrap(err, "failed to retrieve user roles")
 	}
 

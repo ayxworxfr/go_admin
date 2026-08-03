@@ -13,7 +13,6 @@ import (
 	"github.com/ayxworxfr/go_admin/pkg/logger"
 	"github.com/cloudwego/hertz/pkg/app/server"
 	hertztracing "github.com/hertz-contrib/obs-opentelemetry/tracing"
-	"go.uber.org/zap"
 )
 
 type App struct {
@@ -42,7 +41,7 @@ func (a *App) Run() error {
 	if err := a.executeFuns(a.initFuncs...); err != nil {
 		panic(fmt.Sprintf("failed to initialize application: %v", err))
 	}
-	logger.Info(ctx, "Starting server", zap.Int("port", a.config.Server.Port))
+	logger.Info(ctx, "Starting server", logger.Int("port", a.config.Server.Port))
 	return a.server.Run()
 }
 
@@ -52,7 +51,7 @@ func (a *App) GracefulShutdown(timeout time.Duration) {
 	a.executeFuns(a.exitFuncs...)
 
 	if err := a.server.Shutdown(ctx); err != nil {
-		logger.Error(context.Background(), "Server forced to shutdown", zap.Error(err))
+		logger.Error(context.Background(), "Server forced to shutdown", logger.Err(err))
 	}
 }
 

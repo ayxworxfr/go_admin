@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/ayxworxfr/go_admin/internal/modules/user/dto"
 	"github.com/ayxworxfr/go_admin/internal/modules/user/model"
@@ -11,7 +12,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // Service 用户服务：负责用户 CRUD 与密码校验。
@@ -52,6 +52,19 @@ func (s *Service) VerifyPassword(u *model.User, plainPassword string) bool {
 	return s.hasher.Verify(plainPassword, u.PasswordHash)
 }
 
+// UpdateLastLoginTime 实现 LoginRecorder：只回写 last_login_time 这一列。
+//
+// 用只含 ID + LastLoginTime 的部分模型调用 repo.Update（xorm 默认按非零字段
+// 更新），刻意不先 FindByID 再整体保存——登录是高频路径，没必要为了改一列
+// 多打一次查询，也避免并发场景下"先读后写"覆盖掉同一时刻其他字段的并发更新。
+func (s *Service) UpdateLastLoginTime(ctx context.Context, userID uint64) error {
+	if err := s.repo.Update(ctx, &model.User{ID: userID, LastLoginTime: time.Now()}); err != nil {
+		logger.Error(ctx, "Failed to update last login time", logger.Err(err), logger.Uint64("user_id", userID))
+		return errors.Wrap(err, "failed to update last login time")
+	}
+	return nil
+}
+
 // Create 创建用户（明文密码只存在于 DTO；落库前在此哈希为 PasswordHash）
 func (s *Service) Create(ctx context.Context, req *dto.CreateUserRequest) (*model.User, error) {
 	var u model.User
@@ -67,7 +80,7 @@ func (s *Service) Create(ctx context.Context, req *dto.CreateUserRequest) (*mode
 	u.PasswordHash = hashed
 
 	if err := s.repo.Create(ctx, &u); err != nil {
-		logger.Error(ctx, "Failed to create user", zap.Error(err))
+		logger.Error(ctx, "Failed to create user", logger.Err(err))
 		return nil, errors.Wrap(err, "failed to create user")
 	}
 	return &u, nil
@@ -77,7 +90,7 @@ func (s *Service) Create(ctx context.Context, req *dto.CreateUserRequest) (*mode
 func (s *Service) Update(ctx context.Context, req *dto.UpdateUserRequest) (*model.User, error) {
 	u, err := s.repo.FindByID(ctx, req.ID)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve user", zap.Error(err), zap.Uint64("user_id", req.ID))
+		logger.Error(ctx, "Failed to retrieve user", logger.Err(err), logger.Uint64("user_id", req.ID))
 		return nil, errors.Wrap(err, "failed to retrieve user")
 	}
 
@@ -95,7 +108,7 @@ func (s *Service) Update(ctx context.Context, req *dto.UpdateUserRequest) (*mode
 	}
 
 	if err := s.repo.Update(ctx, u); err != nil {
-		logger.Error(ctx, "Failed to update user", zap.Error(err), zap.Uint64("user_id", req.ID))
+		logger.Error(ctx, "Failed to update user", logger.Err(err), logger.Uint64("user_id", req.ID))
 		return nil, errors.Wrap(err, "failed to update user")
 	}
 	return u, nil
@@ -116,7 +129,7 @@ func (s *Service) DeleteUsers(ctx context.Context, ids []uint64) error {
 		}
 	}
 	if err := result.ErrorOrNil(); err != nil {
-		logger.Error(ctx, "Failed to delete users", zap.Error(err), zap.Uint64s("user_ids", ids))
+		logger.Error(ctx, "Failed to delete users", logger.Err(err), logger.Uint64s("user_ids", ids))
 		return err
 	}
 	return nil

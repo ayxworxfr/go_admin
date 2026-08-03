@@ -9,7 +9,6 @@ import (
 	"github.com/ayxworxfr/go_admin/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
-	"go.uber.org/zap"
 )
 
 // PermissionChecker 是鉴权热路径：JWTAuthMiddleware 每个受保护请求都会调用
@@ -42,7 +41,7 @@ func (c *PermissionChecker) HasPermission(ctx context.Context, userID uint64, me
 
 	permissions, err := c.getUserAllPermissions(ctx, userID)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve user permissions", zap.Error(err), zap.Uint64("user_id", userID))
+		logger.Error(ctx, "Failed to retrieve user permissions", logger.Err(err), logger.Uint64("user_id", userID))
 		return false, errors.Wrap(err, "failed to retrieve user permissions")
 	}
 

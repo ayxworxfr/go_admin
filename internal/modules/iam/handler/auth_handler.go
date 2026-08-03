@@ -3,8 +3,8 @@ package handler
 import (
 	"github.com/ayxworxfr/go_admin/internal/modules/iam/dto"
 	"github.com/ayxworxfr/go_admin/internal/modules/iam/service"
+	"github.com/ayxworxfr/go_admin/pkg/api"
 	"github.com/ayxworxfr/go_admin/pkg/jwtauth"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
 )
 
 // AuthHandler 登录会话相关接口
@@ -19,20 +19,20 @@ func NewAuthHandler(authSvc *service.AuthService, jwt *jwtauth.JWT) *AuthHandler
 }
 
 // @route POST /login
-func (h *AuthHandler) Login(c *reqctx.Context) *reqctx.Response {
+func (h *AuthHandler) Login(c *api.Context) *api.Response {
 	var req dto.LoginRequest
 	if err := c.BindAndValidate(&req); err != nil {
-		return reqctx.ParamError(err)
+		return api.ParamError(err)
 	}
 
 	token, err := h.authSvc.Login(c.Context(), req.Username, req.Password)
 	if err != nil {
-		return reqctx.Unauthorized(err)
+		return api.Unauthorized(err)
 	}
 
 	claims, err := h.jwt.ParseToken(token.AccessToken)
 	if err != nil {
-		return reqctx.Unauthorized("Invalid token")
+		return api.Unauthorized("Invalid token")
 	}
 
 	result := dto.LoginResult{
@@ -45,41 +45,41 @@ func (h *AuthHandler) Login(c *reqctx.Context) *reqctx.Response {
 		Type:             "account",
 		CurrentAuthority: claims.RoleKey,
 	}
-	return reqctx.Success(result)
+	return api.Success(result)
 }
 
 // @route POST /refresh/token
 // RefreshToken 刷新令牌
-func (h *AuthHandler) RefreshToken(c *reqctx.Context) *reqctx.Response {
+func (h *AuthHandler) RefreshToken(c *api.Context) *api.Response {
 	var req dto.RefreshTokenRequest
 	if err := c.BindAndValidate(&req); err != nil {
-		return reqctx.ParamError(err)
+		return api.ParamError(err)
 	}
 
 	token, err := h.authSvc.RefreshToken(c.Context(), req.RefreshToken)
 	if err != nil {
-		return reqctx.Unauthorized(err.Error())
+		return api.Unauthorized(err.Error())
 	}
-	return reqctx.Success(token)
+	return api.Success(token)
 }
 
 // @route POST /logout
 // 该接口在公开路由组，不走 JWT 中间件，因此在此自行解析 Bearer access token。
-func (h *AuthHandler) Logout(c *reqctx.Context) *reqctx.Response {
+func (h *AuthHandler) Logout(c *api.Context) *api.Response {
 	tokenString := c.BearerToken()
 	if tokenString == "" {
-		return reqctx.Unauthorized("No token provided")
+		return api.Unauthorized("No token provided")
 	}
 
 	claims, err := h.jwt.ParseToken(tokenString)
 	if err != nil {
-		return reqctx.Unauthorized("Invalid token")
+		return api.Unauthorized("Invalid token")
 	}
 	if claims.Type != "" && claims.Type != jwtauth.AccessTokenType {
-		return reqctx.Unauthorized("Access token required")
+		return api.Unauthorized("Access token required")
 	}
 	if err := h.authSvc.Logout(c.Context(), claims); err != nil {
-		return reqctx.InternalError(err)
+		return api.InternalError(err)
 	}
-	return reqctx.Success("Logout")
+	return api.Success("Logout")
 }

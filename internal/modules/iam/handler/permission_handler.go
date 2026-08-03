@@ -3,7 +3,7 @@ package handler
 import (
 	"github.com/ayxworxfr/go_admin/internal/modules/iam/dto"
 	"github.com/ayxworxfr/go_admin/internal/modules/iam/service"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
+	"github.com/ayxworxfr/go_admin/pkg/api"
 )
 
 // PermissionHandler 权限元数据管理接口
@@ -19,62 +19,62 @@ func NewPermissionHandler(permSvc *service.PermissionService, checker *service.P
 
 // @route Post /permission
 // CreatePermission 创建权限
-func (h *PermissionHandler) CreatePermission(c *reqctx.Context, req *dto.CreatePermissionRequest) *reqctx.Response {
+func (h *PermissionHandler) CreatePermission(c *api.Context, req *dto.CreatePermissionRequest) *api.Response {
 	permission, err := h.permSvc.CreatePermission(c.Context(), req)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 	h.checker.InvalidateAll()
-	return reqctx.Success(permission)
+	return api.Success(permission)
 }
 
 // @route Post /permission/batch
 // CreatePermissionBatch 批量创建权限
-func (h *PermissionHandler) CreatePermissionBatch(c *reqctx.Context, req *dto.CreatePermissionsRequest) *reqctx.Response {
+func (h *PermissionHandler) CreatePermissionBatch(c *api.Context, req *dto.CreatePermissionsRequest) *api.Response {
 	if err := h.permSvc.CreatePermissions(c.Context(), req); err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 	h.checker.InvalidateAll()
-	return reqctx.Success(nil)
+	return api.Success(nil)
 }
 
 // @route Put /permission
 // UpdatePermission 更新权限
-func (h *PermissionHandler) UpdatePermission(c *reqctx.Context, req *dto.UpdatePermissionRequest) *reqctx.Response {
+func (h *PermissionHandler) UpdatePermission(c *api.Context, req *dto.UpdatePermissionRequest) *api.Response {
 	permission, err := h.permSvc.UpdatePermission(c.Context(), req)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 	h.checker.InvalidateAll()
-	return reqctx.Success(permission)
+	return api.Success(permission)
 }
 
 // @route Delete /permission
 // DeletePermission 删除权限
-func (h *PermissionHandler) DeletePermission(c *reqctx.Context, req *dto.DeletePermissionRequest) *reqctx.Response {
+func (h *PermissionHandler) DeletePermission(c *api.Context, req *dto.DeletePermissionRequest) *api.Response {
 	if err := h.permSvc.DeletePermissionBatch(c.Context(), req.IDs); err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 	h.checker.InvalidateAll()
-	return reqctx.NoContent()
+	return api.NoContent()
 }
 
 // @route Get /permission
 // GetPermission 获取单个权限
-func (h *PermissionHandler) GetPermission(c *reqctx.Context, req *dto.GetPermissionRequest) *reqctx.Response {
+func (h *PermissionHandler) GetPermission(c *api.Context, req *dto.GetPermissionRequest) *api.Response {
 	permission, err := h.permSvc.GetPermission(c.Context(), req.ID)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
-	return reqctx.Success(permission)
+	return api.Success(permission)
 }
 
 // @route Get /permission/list
 // GetPermissionList 获取权限列表
-func (h *PermissionHandler) GetPermissionList(c *reqctx.Context, req *dto.GetPermissionListRequest) *reqctx.Response {
+func (h *PermissionHandler) GetPermissionList(c *api.Context, req *dto.GetPermissionListRequest) *api.Response {
 	permissions, total, err := h.permSvc.GetPermissionList(c.Context(), req)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
-	return reqctx.PageSuccess(permissions, total)
+	return api.PageSuccess(permissions, total)
 }

@@ -109,18 +109,18 @@ model → dto 的转换统一用 `copier.Copy`，不手写字段搬运；转换�
 
 ```go
 // @route Post /user
-func (h *Handler) CreateUser(c *reqctx.Context, req *dto.CreateUserRequest) *reqctx.Response {
+func (h *Handler) CreateUser(c *api.Context, req *dto.CreateUserRequest) *api.Response {
 	u, err := h.svc.Create(c.Context(), req)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 	// ...
-	return reqctx.Success(resp)
+	return api.Success(resp)
 }
 ```
 
 - 路由注册优先查编译期表（`routes_gen.go`，来源是 `// @route Verb /path`）；无表项时才按方法名前缀（`Get`/`Post`/`Create`/`Update`/`Delete`/`Put`）推断。改 `@route` 后必须 `make generate`，否则本地/CI 的 `TestCompiledRoutesFresh` 会失败。
-- 返回值统一用 `pkg/reqctx` 包提供的构造函数：`reqctx.Success`/`reqctx.PageSuccess`/`reqctx.NoContent`/`reqctx.DatabaseError`/`reqctx.BusinessError`/`reqctx.InternalError`/`reqctx.Unauthorized`，不要手写 `map[string]any` 拼响应体。
+- 返回值统一用 `pkg/api` 包提供的构造函数：`api.Success`/`api.PageSuccess`/`api.NoContent`/`api.DatabaseError`/`api.BusinessError`/`api.InternalError`/`api.Unauthorized`，不要手写 `map[string]any` 拼响应体。
 - Handler 构造函数只接收 `*service.Service` 或跨模块窄接口，不接收 repository 类型（也拿不到，repo 字段是 unexported，见 [module-structure.md](module-structure.md) §2）。
 
 ## 5. 测试隔离手法

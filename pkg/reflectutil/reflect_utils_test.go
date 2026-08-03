@@ -1,4 +1,4 @@
-package utils
+package reflectutil
 
 import (
 	"context"
@@ -30,6 +30,14 @@ func (t *TestStruct) ErrorMethod() error {
 	return errors.New("test error")
 }
 
+// AcceptsNilable 用于验证 nil 实参不会导致 reflect.Call panic。
+func (t *TestStruct) AcceptsNilable(name *string, tags []string) string {
+	if name == nil {
+		return "nil:" + reflect.TypeOf(tags).String()
+	}
+	return *name
+}
+
 func TestNewMethodInvoker(t *testing.T) {
 	ts := &TestStruct{}
 
@@ -59,6 +67,27 @@ func TestInvoke(t *testing.T) {
 
 	if len(result) != 1 || result[0].Int() != 5 {
 		t.Errorf("Expected result 5, got %v", result[0].Int())
+	}
+}
+
+// TestInvoke_NilArgument 验证向指针/slice 类型的形参传 nil 不会 panic，
+// 而是被还原为该形参类型的零值。
+func TestInvoke_NilArgument(t *testing.T) {
+	ts := &TestStruct{}
+	invoker, err := NewMethodInvoker(ts, "AcceptsNilable")
+	if err != nil {
+		t.Fatalf("NewMethodInvoker failed: %v", err)
+	}
+
+	result, err := invoker.Invoke(nil, nil)
+	if err != nil {
+		t.Fatalf("Invoke with nil args failed: %v", err)
+	}
+
+	got := result[0].String()
+	want := "nil:[]string"
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
 	}
 }
 
@@ -218,6 +247,42 @@ func TestMethodCacheConcurrency(t *testing.T) {
 		}()
 	}
 
+	wg.Wait()
+}
+
+// TestMethodCache_ConcurrentClearAndGet 用 -race 验证 ClearCache 与并发的
+// GetOrCreateMethodInvoker 之间不会产生数据竞争（老实现用 cache.cache = sync.Map{}
+// 整体替换字段，会被 -race 判定为竞争）。
+func TestMethodCache_ConcurrentClearAndGet(t *testing.T) {
+	cache := &MethodCache{}
+	ts := &TestStruct{}
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				cache.ClearCache()
+			}
+		}
+	}()
+
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = cache.GetOrCreateMethodInvoker(ts, "Add")
+		}()
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	close(stop)
 	wg.Wait()
 }
 

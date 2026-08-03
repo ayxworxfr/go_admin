@@ -129,7 +129,7 @@ package handler
 import (
 	"github.com/ayxworxfr/go_admin/internal/modules/notice/dto"
 	"github.com/ayxworxfr/go_admin/internal/modules/notice/service"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
+	"github.com/ayxworxfr/go_admin/pkg/api"
 	"github.com/jinzhu/copier"
 )
 
@@ -142,16 +142,16 @@ func NewHandler(svc *service.Service) *Handler {
 }
 
 // @route Post /notice
-func (h *Handler) CreateNotice(c *reqctx.Context, req *dto.CreateNoticeRequest) *reqctx.Response {
+func (h *Handler) CreateNotice(c *api.Context, req *dto.CreateNoticeRequest) *api.Response {
 	n, err := h.svc.Create(c.Context(), req)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
 	var resp dto.NoticeResponse
 	if err := copier.Copy(&resp, n); err != nil {
-		return reqctx.InternalError(err)
+		return api.InternalError(err)
 	}
-	return reqctx.Success(&resp)
+	return api.Success(&resp)
 }
 ```
 

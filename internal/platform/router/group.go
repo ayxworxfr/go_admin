@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/ayxworxfr/go_admin/pkg/api"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/cloudwego/hertz/pkg/route"
@@ -87,9 +87,9 @@ func (rg *RouterGroup) DELETE(path string, handler any) {
 
 // step 是启动期预编译后的处理步骤。
 // 返回 false 表示链路终止（已写响应或被 abort）。
-type step func(stdCtx context.Context, c *app.RequestContext, myCtx *reqctx.Context) bool
+type step func(stdCtx context.Context, c *app.RequestContext, myCtx *api.Context) bool
 
-var contextPtrType = reflect.TypeOf((*reqctx.Context)(nil))
+var contextPtrType = reflect.TypeOf((*api.Context)(nil))
 
 func compileChain(middlewares []any, handler any) app.HandlerFunc {
 	steps := make([]step, 0, len(middlewares)+1)
@@ -99,7 +99,7 @@ func compileChain(middlewares []any, handler any) app.HandlerFunc {
 	steps = append(steps, compileStep(handler))
 
 	return func(stdCtx context.Context, c *app.RequestContext) {
-		myCtx := reqctx.New(stdCtx, c)
+		myCtx := api.New(stdCtx, c)
 		for _, s := range steps {
 			if !s(stdCtx, c, myCtx) {
 				return
@@ -110,12 +110,12 @@ func compileChain(middlewares []any, handler any) app.HandlerFunc {
 
 func compileStep(handler any) step {
 	if handler == nil {
-		return func(context.Context, *app.RequestContext, *reqctx.Context) bool { return true }
+		return func(context.Context, *app.RequestContext, *api.Context) bool { return true }
 	}
 
 	// 原生 Hertz HandlerFunc（JWT / Logger / Metrics 等）
 	if hf, ok := handler.(app.HandlerFunc); ok {
-		return func(stdCtx context.Context, c *app.RequestContext, myCtx *reqctx.Context) bool {
+		return func(stdCtx context.Context, c *app.RequestContext, myCtx *api.Context) bool {
 			hf(stdCtx, c)
 			return !myCtx.IsAborted()
 		}
@@ -124,7 +124,7 @@ func compileStep(handler any) step {
 	v := reflect.ValueOf(handler)
 	t := v.Type()
 	if t.Kind() != reflect.Func {
-		return func(context.Context, *app.RequestContext, *reqctx.Context) bool { return true }
+		return func(context.Context, *app.RequestContext, *api.Context) bool { return true }
 	}
 
 	switch t.NumIn() {
@@ -138,7 +138,7 @@ func compileStep(handler any) step {
 		}
 	}
 
-	return func(_ context.Context, _ *app.RequestContext, myCtx *reqctx.Context) bool {
+	return func(_ context.Context, _ *app.RequestContext, myCtx *api.Context) bool {
 		myCtx.String(consts.StatusInternalServerError, "Invalid handler function")
 		return false
 	}
@@ -146,7 +146,7 @@ func compileStep(handler any) step {
 
 func compileCtxOnly(v reflect.Value, t reflect.Type) step {
 	hasOut := t.NumOut() > 0
-	return func(_ context.Context, _ *app.RequestContext, myCtx *reqctx.Context) bool {
+	return func(_ context.Context, _ *app.RequestContext, myCtx *api.Context) bool {
 		outs := v.Call([]reflect.Value{reflect.ValueOf(myCtx)})
 		if !hasOut {
 			return true
@@ -158,10 +158,10 @@ func compileCtxOnly(v reflect.Value, t reflect.Type) step {
 func compileCtxReq(v reflect.Value, t reflect.Type) step {
 	reqType := t.In(1).Elem()
 	hasOut := t.NumOut() > 0
-	return func(_ context.Context, c *app.RequestContext, myCtx *reqctx.Context) bool {
+	return func(_ context.Context, c *app.RequestContext, myCtx *api.Context) bool {
 		param := reflect.New(reqType)
 		if err := c.BindAndValidate(param.Interface()); err != nil {
-			reqctx.ParamError(err).Write(myCtx)
+			api.ParamError(err).Write(myCtx)
 			return false
 		}
 		outs := v.Call([]reflect.Value{reflect.ValueOf(myCtx), param})
@@ -173,7 +173,7 @@ func compileCtxReq(v reflect.Value, t reflect.Type) step {
 }
 
 // writeOutputs 处理 handler 返回值：*Response / error 终止链路，其它继续。
-func writeOutputs(c *reqctx.Context, outs []reflect.Value) bool {
+func writeOutputs(c *api.Context, outs []reflect.Value) bool {
 	if len(outs) == 0 {
 		return true
 	}
@@ -182,7 +182,7 @@ func writeOutputs(c *reqctx.Context, outs []reflect.Value) bool {
 		return true
 	}
 	switch val := out.Interface().(type) {
-	case *reqctx.Response:
+	case *api.Response:
 		val.Write(c)
 		return false
 	case error:

@@ -16,7 +16,6 @@ import (
 	"github.com/ayxworxfr/go_admin/pkg/crypter"
 	"github.com/ayxworxfr/go_admin/pkg/jwtauth"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
-	"go.uber.org/zap"
 )
 
 const shutdownTimeout = 3 * time.Second
@@ -43,7 +42,7 @@ func Run(cfg *config.Config) error {
 	// 否则 Hertz 会绑到 noop，日志里虽有 trace_id，Jaeger 却永远空。
 	otelProvider, err := myapp.InitOpenTelemetry(cfg.OpenTelemetry)
 	if err != nil {
-		logger.Error(context.Background(), "Failed to initialize OpenTelemetry", zap.Error(err))
+		logger.Error(context.Background(), "Failed to initialize OpenTelemetry", logger.Err(err))
 	}
 
 	container := NewContainer(engine, crypter.NewArgon2Hasher(), jwt, tokenStore)
@@ -52,7 +51,7 @@ func Run(cfg *config.Config) error {
 	if otelProvider != nil {
 		app.RegisterExit(func() error {
 			if err := otelProvider.Shutdown(context.Background()); err != nil {
-				logger.Error(context.Background(), "Failed to shutdown OpenTelemetry provider", zap.Error(err))
+				logger.Error(context.Background(), "Failed to shutdown OpenTelemetry provider", logger.Err(err))
 				return err
 			}
 			return nil
@@ -95,7 +94,7 @@ func awaitShutdown(app *myapp.App, errCh <-chan error) error {
 		}
 		return nil
 	case sig := <-quit:
-		logger.Info(context.Background(), "Shutting down server...", zap.String("signal", sig.String()))
+		logger.Info(context.Background(), "Shutting down server...", logger.String("signal", sig.String()))
 		app.GracefulShutdown(shutdownTimeout)
 		logger.Info(context.Background(), "Server exiting")
 		return nil

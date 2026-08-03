@@ -4,10 +4,9 @@ import (
 	"context"
 	"runtime/debug"
 
+	"github.com/ayxworxfr/go_admin/pkg/api"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
 	"github.com/cloudwego/hertz/pkg/app"
-	"go.uber.org/zap"
 )
 
 // GlobalErrorMiddleware 是一个中间件，用于捕获 panic 并统一处理错误
@@ -20,13 +19,13 @@ func GlobalErrorHandlerMiddleware() app.HandlerFunc {
 
 				// 使用结构化日志记录错误和堆栈跟踪
 				logger.Error(ctx, "Panic occurred",
-					zap.Any("error", err),
-					zap.String("url", string(c.Request.URI().FullURI())),
-					zap.String("method", string(c.Request.Method())),
-					zap.String("stack", string(stack)),
+					logger.Any("error", err),
+					logger.String("url", string(c.Request.URI().FullURI())),
+					logger.String("method", string(c.Request.Method())),
+					logger.String("stack", string(stack)),
 				)
 
-				reqctx.Abort(c, reqctx.InternalError())
+				api.Abort(c, api.InternalError())
 			}
 		}()
 

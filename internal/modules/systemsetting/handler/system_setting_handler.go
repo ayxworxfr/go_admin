@@ -3,7 +3,7 @@ package handler
 import (
 	"github.com/ayxworxfr/go_admin/internal/modules/systemsetting/dto"
 	"github.com/ayxworxfr/go_admin/internal/modules/systemsetting/service"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
+	"github.com/ayxworxfr/go_admin/pkg/api"
 )
 
 // Handler 系统配置管理接口
@@ -17,58 +17,58 @@ func NewHandler(svc *service.Service) *Handler {
 }
 
 // @route Post /system-setting
-func (h *Handler) CreateSystemSetting(c *reqctx.Context, req *dto.CreateSystemSettingRequest) *reqctx.Response {
+func (h *Handler) CreateSystemSetting(c *api.Context, req *dto.CreateSystemSettingRequest) *api.Response {
 	userID, err := c.UserID()
 	if err != nil {
-		return reqctx.Unauthorized(err)
+		return api.Unauthorized(err)
 	}
 	result, err := h.svc.Create(c.Context(), req, userID)
 	if err != nil {
-		return reqctx.BusinessError(err)
+		return api.BusinessError(err)
 	}
-	return reqctx.Success(result)
+	return api.Success(result)
 }
 
 // @route Get /system-setting
-func (h *Handler) GetSystemSetting(c *reqctx.Context, req *dto.GetSystemSettingRequest) *reqctx.Response {
+func (h *Handler) GetSystemSetting(c *api.Context, req *dto.GetSystemSettingRequest) *api.Response {
 	result, err := h.svc.Get(c.Context(), req.ID)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
-	return reqctx.Success(result)
+	return api.Success(result)
 }
 
 // @route Get /system-setting/list
-func (h *Handler) GetSystemSettingList(c *reqctx.Context, req *dto.GetSystemSettingListRequest) *reqctx.Response {
+func (h *Handler) GetSystemSettingList(c *api.Context, req *dto.GetSystemSettingListRequest) *api.Response {
 	result, total, err := h.svc.List(c.Context(), req)
 	if err != nil {
-		return reqctx.DatabaseError(err)
+		return api.DatabaseError(err)
 	}
-	return reqctx.PageSuccess(result, total)
+	return api.PageSuccess(result, total)
 }
 
 // @route Put /system-setting
-func (h *Handler) UpdateSystemSetting(c *reqctx.Context, req *dto.UpdateSystemSettingRequest) *reqctx.Response {
+func (h *Handler) UpdateSystemSetting(c *api.Context, req *dto.UpdateSystemSettingRequest) *api.Response {
 	result, err := h.svc.Update(c.Context(), req)
 	if err != nil {
-		return reqctx.BusinessError(err)
+		return api.BusinessError(err)
 	}
-	return reqctx.Success(result)
+	return api.Success(result)
 }
 
 // @route Delete /system-setting
-func (h *Handler) DeleteSystemSetting(c *reqctx.Context, req *dto.DeleteSystemSettingRequest) *reqctx.Response {
+func (h *Handler) DeleteSystemSetting(c *api.Context, req *dto.DeleteSystemSettingRequest) *api.Response {
 	if err := h.svc.DeleteBatch(c.Context(), req.IDs); err != nil {
-		return reqctx.BusinessError(err)
+		return api.BusinessError(err)
 	}
-	return reqctx.Success(nil)
+	return api.Success(nil)
 }
 
 // @route Get /system-setting/by-category
-func (h *Handler) GetSystemSettingByCategory(c *reqctx.Context, req *dto.GetSystemSettingByCategoryRequest) *reqctx.Response {
+func (h *Handler) GetSystemSettingByCategory(c *api.Context, req *dto.GetSystemSettingByCategoryRequest) *api.Response {
 	result, err := h.svc.GetByCategory(c.Context(), req.Category)
 	if err != nil {
-		return reqctx.BusinessError(err)
+		return api.BusinessError(err)
 	}
-	return reqctx.Success(result)
+	return api.Success(result)
 }

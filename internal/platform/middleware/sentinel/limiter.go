@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
@@ -81,7 +80,7 @@ func IPRateLimiterMiddleware(rps, burst int, cfg *RateLimiterConfig) app.Handler
 				metric.WithDescription("Total number of requests"),
 			)
 			if err != nil {
-				logger.Error(ctx, "Failed to create request counter", zap.Error(err))
+				logger.Error(ctx, "Failed to create request counter", logger.Err(err))
 			}
 
 			blockedCounter, err = meter.Int64Counter(
@@ -89,7 +88,7 @@ func IPRateLimiterMiddleware(rps, burst int, cfg *RateLimiterConfig) app.Handler
 				metric.WithDescription("Total number of blocked requests"),
 			)
 			if err != nil {
-				logger.Error(ctx, "Failed to create blocked counter", zap.Error(err))
+				logger.Error(ctx, "Failed to create blocked counter", logger.Err(err))
 			}
 		})
 
@@ -107,10 +106,10 @@ func IPRateLimiterMiddleware(rps, burst int, cfg *RateLimiterConfig) app.Handler
 				limiterMap[ip] = limiter
 				lastSeen[ip] = start
 
-				logger.FromContext(ctx).Info("New rate limiter created",
-					zap.String("ip", ip),
-					zap.Int("rps", rps),
-					zap.Int("burst", burst))
+				logger.Info(ctx, "New rate limiter created",
+					logger.String("ip", ip),
+					logger.Int("rps", rps),
+					logger.Int("burst", burst))
 			}
 			mu.Unlock()
 		} else {
@@ -124,9 +123,9 @@ func IPRateLimiterMiddleware(rps, burst int, cfg *RateLimiterConfig) app.Handler
 
 		// 执行限流检查
 		if !limiter.Allow() {
-			logger.FromContext(ctx).Warn("Request blocked by rate limiter",
-				zap.String("ip", ip),
-				zap.String("path", path))
+			logger.Warn(ctx, "Request blocked by rate limiter",
+				logger.String("ip", ip),
+				logger.String("path", path))
 
 			// 记录限流指标
 			if cfg.EnableMetrics && requestCounter != nil && blockedCounter != nil {
@@ -234,7 +233,7 @@ func RedisClusterRateLimiter(client *redis.ClusterClient, rps, burst int, keyPre
 				metric.WithDescription("Total number of requests"),
 			)
 			if err != nil {
-				logger.Error(ctx, "Failed to create request counter", zap.Error(err))
+				logger.Error(ctx, "Failed to create request counter", logger.Err(err))
 			}
 
 			blockedCounter, err = meter.Int64Counter(
@@ -242,7 +241,7 @@ func RedisClusterRateLimiter(client *redis.ClusterClient, rps, burst int, keyPre
 				metric.WithDescription("Total number of blocked requests"),
 			)
 			if err != nil {
-				logger.Error(ctx, "Failed to create blocked counter", zap.Error(err))
+				logger.Error(ctx, "Failed to create blocked counter", logger.Err(err))
 			}
 
 			errorCounter, err = meter.Int64Counter(
@@ -250,17 +249,17 @@ func RedisClusterRateLimiter(client *redis.ClusterClient, rps, burst int, keyPre
 				metric.WithDescription("Total number of errors"),
 			)
 			if err != nil {
-				logger.Error(ctx, "Failed to create error counter", zap.Error(err))
+				logger.Error(ctx, "Failed to create error counter", logger.Err(err))
 			}
 		})
 
 		// 执行Lua脚本进行限流检查
 		result, err := script.Run(ctx, client, []string{key}, rps, burst, now, 1).Result()
 		if err != nil {
-			logger.FromContext(ctx).Error("Distributed rate limiting evaluation failed",
-				zap.Error(err),
-				zap.String("ip", ip),
-				zap.String("path", path))
+			logger.Error(ctx, "Distributed rate limiting evaluation failed",
+				logger.Err(err),
+				logger.String("ip", ip),
+				logger.String("path", path))
 
 			// 记录错误指标
 			if errorCounter != nil {
@@ -280,9 +279,9 @@ func RedisClusterRateLimiter(client *redis.ClusterClient, rps, burst int, keyPre
 		// 检查是否允许请求
 		allowed, ok := result.(int64)
 		if !ok || allowed == 0 {
-			logger.FromContext(ctx).Warn("Request blocked by distributed rate limiter",
-				zap.String("ip", ip),
-				zap.String("path", path))
+			logger.Warn(ctx, "Request blocked by distributed rate limiter",
+				logger.String("ip", ip),
+				logger.String("path", path))
 
 			// 记录限流指标
 			if requestCounter != nil && blockedCounter != nil {

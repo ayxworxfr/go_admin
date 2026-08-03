@@ -73,7 +73,7 @@ internal/
 2. 建 `model/`：只放数据结构（xorm tag），不放密码校验之类的算法方法——算法通过接口注入到 service，不挂在 model 上。
 3. 建 `dto/`：`CreateXxxRequest`/`UpdateXxxRequest`/`GetXxxRequest`/`GetXxxListRequest`/`XxxResponse`，命名与已有模块（`user/dto/user.go`）保持一致，用 `vd:` tag 做参数校验。
 4. 建 `service/`：`NewService(db *pkgrepo.DB, ...窄接口) *Service`，`repo` 用 `pkgrepo.NewRepository[model.Xxx](db)` 当场构造（见 §2）；对外能力另声明窄接口（参考 `user_finder.go`）。
-5. 建 `handler/`：每个方法一个 `// @route Verb /path` 注释，方法签名 `func (h *Handler) Xxx(c *reqctx.Context, req *dto.XxxRequest) *reqctx.Response`，构造函数只接收 `*service.Service` 或跨模块窄接口，不接收 repository。
+5. 建 `handler/`：每个方法一个 `// @route Verb /path` 注释，方法签名 `func (h *Handler) Xxx(c *api.Context, req *dto.XxxRequest) *api.Response`，构造函数只接收 `*service.Service` 或跨模块窄接口，不接收 repository。
 6. 执行 `make generate`（或 `go generate ./internal/platform/router/...`），把 `@route` 写进 `routes_gen.go`；漏跑会被 `TestCompiledRoutesFresh` 拦住。
 7. 在 `internal/bootstrap/container.go` 里按依赖顺序装配新 Service，加进 `Container` 结构体字段，若有可持久化 model 加进 `Models()`。
 8. 在 `internal/bootstrap/routes.go` 的 `setupRoutes` 里构造新 Handler，传给 `app.SetupRoutes(...)`。

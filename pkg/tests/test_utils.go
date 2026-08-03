@@ -6,7 +6,7 @@ import (
 
 	"github.com/ayxworxfr/go_admin/internal/platform/config"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
-	"github.com/ayxworxfr/go_admin/pkg/utils"
+	"github.com/ayxworxfr/go_admin/pkg/pathutil"
 )
 
 var (
@@ -23,7 +23,7 @@ func init() {
 
 func InitConfig() *config.Config {
 	// 加载配置
-	configPath := utils.GetAbsPath("conf/config_test.yaml")
+	configPath := pathutil.AbsPath("conf/config_test.yaml")
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to load config: %v", err))

@@ -47,6 +47,12 @@ func TestParseDuration(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "fractional hours",
+			input:   "1.5h",
+			want:    90 * time.Minute,
+			wantErr: false,
+		},
+		{
 			name:    "empty string",
 			input:   "",
 			want:    0,
@@ -182,7 +188,7 @@ func TestClaimsFromContext(t *testing.T) {
 	assert.Equal(t, claims, extractedClaims)
 }
 
-func TestUserInfoFromContext(t *testing.T) {
+func TestUserIDUint64FromContext(t *testing.T) {
 	jwtManager, err := NewJWT("test-secret-key", "24h", "30d")
 	assert.NoError(t, err)
 
@@ -197,11 +203,15 @@ func TestUserInfoFromContext(t *testing.T) {
 	ctx := app.NewContext(1)
 	ctx.Set(ClaimsKey, claims)
 
-	userInfo, err := UserInfoFromContext(ctx)
+	uid, err := UserIDUint64FromContext(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, userID, userInfo.UserID)
-	assert.Equal(t, username, userInfo.Username)
-	assert.Equal(t, roleKey, userInfo.RoleKey)
+	assert.Equal(t, uint64(123), uid)
+}
+
+func TestUserIDUint64FromContext_MissingClaims(t *testing.T) {
+	ctx := app.NewContext(1)
+	_, err := UserIDUint64FromContext(ctx)
+	assert.Error(t, err)
 }
 
 func TestJWT_InvalidDuration(t *testing.T) {

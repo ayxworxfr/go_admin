@@ -5,11 +5,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ayxworxfr/go_admin/pkg/api"
+	"github.com/ayxworxfr/go_admin/pkg/constant"
 	"github.com/ayxworxfr/go_admin/pkg/jwtauth"
 	"github.com/ayxworxfr/go_admin/pkg/logger"
-	"github.com/ayxworxfr/go_admin/pkg/reqctx"
 	"github.com/cloudwego/hertz/pkg/app"
-	"go.uber.org/zap"
 )
 
 // PermissionChecker 是 JWTMiddleware 鉴权所需的最小接口，由 iam 模块的
@@ -60,18 +60,16 @@ func NewJWTMiddleware(jwt *jwtauth.JWT, checker PermissionChecker, tokenStore To
 // Handle 返回 Hertz 处理函数
 func (m *JWTAuthMiddleware) Handle() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
-		tokenString := c.Request.Header.Get("Authorization")
-		if tokenString == "" {
-			reqctx.Abort(c, reqctx.Unauthorized("No token provided"))
+		rawAuth := c.Request.Header.Get(constant.HeaderAuthorization)
+		if rawAuth == "" {
+			api.Abort(c, api.Unauthorized("No token provided"))
 			return
 		}
-		if len(tokenString) > 7 && tokenString[:7] == "Bearer " {
-			tokenString = tokenString[7:]
-		}
+		tokenString := api.StripBearerPrefix(rawAuth)
 
 		claims, err := m.jwt.ParseToken(tokenString)
 		if err != nil {
-			reqctx.Abort(c, reqctx.Unauthorized("Invalid token: "+err.Error()))
+			api.Abort(c, api.Unauthorized("Invalid token: "+err.Error()))
 			return
 		}
 
@@ -79,19 +77,19 @@ func (m *JWTAuthMiddleware) Handle() app.HandlerFunc {
 		if claims.ID != "" {
 			revoked, err := m.tokenStore.IsRevoked(ctx, claims.ID)
 			if err != nil {
-				logger.Error(ctx, "Failed to check token revocation", zap.Error(err))
-				reqctx.Abort(c, reqctx.Unauthorized("Token check error"))
+				logger.Error(ctx, "Failed to check token revocation", logger.Err(err))
+				api.Abort(c, api.Unauthorized("Token check error"))
 				return
 			}
 			if revoked {
-				reqctx.Abort(c, reqctx.Unauthorized("Token has been revoked"))
+				api.Abort(c, api.Unauthorized("Token has been revoked"))
 				return
 			}
 		}
 
 		userID, err := strconv.ParseUint(claims.Identity, 10, 64)
 		if err != nil {
-			reqctx.Abort(c, reqctx.Unauthorized("Invalid user ID in token"))
+			api.Abort(c, api.Unauthorized("Invalid user ID in token"))
 			return
 		}
 		c.Set(jwtauth.ClaimsKey, claims)
@@ -108,15 +106,15 @@ func (m *JWTAuthMiddleware) Handle() app.HandlerFunc {
 
 			hasPermission, err := m.checker.HasPermission(ctx, userID, requestMethod, requestPath)
 			if err != nil {
-				logger.Error(ctx, "Failed to check permission", zap.Error(err),
-					zap.Uint64("user_id", userID), zap.String("method", requestMethod), zap.String("path", requestPath))
-				reqctx.Abort(c, reqctx.InternalError("Permission check error"))
+				logger.Error(ctx, "Failed to check permission", logger.Err(err),
+					logger.Uint64("user_id", userID), logger.String("method", requestMethod), logger.String("path", requestPath))
+				api.Abort(c, api.InternalError("Permission check error"))
 				return
 			}
 			if !hasPermission {
 				logger.Warn(ctx, "Permission denied",
-					zap.Uint64("user_id", userID), zap.String("method", requestMethod), zap.String("path", requestPath))
-				reqctx.Abort(c, reqctx.Forbidden("Permission denied"))
+					logger.Uint64("user_id", userID), logger.String("method", requestMethod), logger.String("path", requestPath))
+				api.Abort(c, api.Forbidden("Permission denied"))
 				return
 			}
 		}

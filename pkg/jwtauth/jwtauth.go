@@ -3,6 +3,7 @@ package jwtauth
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -36,24 +37,21 @@ type TokenPair struct {
 	ExpiresAt    int64  `json:"expires_at"`
 }
 
-// JWT 管理结构体
+// JWT 管理 Access/Refresh Token 的签发、解析与刷新。
+//
+// 签名密钥与过期时长只在 NewJWT 构造期设置，实例构造完成后不再变化，
+// 因此可以安全地在多个 goroutine 间共享同一个 *JWT（本项目就是这样用：
+// 由 Container 构造一次，注入给 AuthHandler/AuthService/JWTAuthMiddleware）。
+// 字段全部不导出：签名密钥属于敏感信息，不应该作为公开字段暴露给持有者随意读取。
 type JWT struct {
-	SigningKey             []byte // 签名密钥
-	TokenExpirationStr     string // Access Token 有效期字符串
-	RefreshTokenExpiration string // Refresh Token 有效期字符串
+	signingKey             []byte
 	tokenExpiration        time.Duration
 	refreshTokenExpiration time.Duration
 }
 
-// NewJWT 创建 JWT 管理器实例
+// NewJWT 创建 JWT 管理器实例。tokenExp/refreshTokenExp 支持 s/m/h/d/w 单位
+// （如 "24h"、"30d"），解析失败会返回错误，不会构造出一个状态不完整的实例。
 func NewJWT(signingKey, tokenExp, refreshTokenExp string) (*JWT, error) {
-	jwtManager := &JWT{
-		SigningKey:             []byte(signingKey),
-		TokenExpirationStr:     tokenExp,
-		RefreshTokenExpiration: refreshTokenExp,
-	}
-
-	// 解析时间字符串
 	tokenExpDur, err := parseDuration(tokenExp)
 	if err != nil {
 		return nil, fmt.Errorf("invalid token expiration: %w", err)
@@ -64,59 +62,50 @@ func NewJWT(signingKey, tokenExp, refreshTokenExp string) (*JWT, error) {
 		return nil, fmt.Errorf("invalid refresh token expiration: %w", err)
 	}
 
-	jwtManager.tokenExpiration = tokenExpDur
-	jwtManager.refreshTokenExpiration = refreshTokenExpDur
-	return jwtManager, nil
+	return &JWT{
+		signingKey:             []byte(signingKey),
+		tokenExpiration:        tokenExpDur,
+		refreshTokenExpiration: refreshTokenExpDur,
+	}, nil
 }
 
-// DefaultJWT 创建默认配置的 JWT 管理器
-func DefaultJWT() (*JWT, error) {
-	return NewJWT("your-secret-key", "24h", "30d")
+// durationUnits 是 parseDuration 支持的单位，d/w 是对 time.ParseDuration 的补充
+// （标准库不认识"天"“周”，但配置文件里这样写最直观）。
+var durationUnits = map[string]time.Duration{
+	"s": time.Second,
+	"m": time.Minute,
+	"h": time.Hour,
+	"d": time.Hour * 24,
+	"w": time.Hour * 24 * 7,
 }
 
-// parseDuration 解析时间格式字符串为time.Duration
+// durationPattern 匹配「数字（可带小数）+ 单位字母」，如 "24h"、"1.5d"。
+var durationPattern = regexp.MustCompile(`^(\d+(?:\.\d+)?)([a-zA-Z]+)$`)
+
+// parseDuration 解析时间格式字符串为 time.Duration。
 func parseDuration(s string) (time.Duration, error) {
 	if s == "" {
 		return 0, errors.New("empty duration string")
 	}
 
-	// 支持的时间单位
-	units := map[string]time.Duration{
-		"s": time.Second,
-		"m": time.Minute,
-		"h": time.Hour,
-		"d": time.Hour * 24,
-		"w": time.Hour * 24 * 7,
-	}
-
-	// 提取数字和单位
-	numStr := ""
-	unit := ""
-	for _, char := range s {
-		if char >= '0' && char <= '9' || char == '.' {
-			numStr += string(char)
-		} else {
-			unit += string(char)
-		}
-	}
-
-	if numStr == "" || unit == "" {
+	matches := durationPattern.FindStringSubmatch(s)
+	if matches == nil {
 		return 0, fmt.Errorf("invalid duration format: %s", s)
 	}
 
-	// 解析数字
-	num, err := strconv.ParseFloat(numStr, 64)
+	num, err := strconv.ParseFloat(matches[1], 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid number in duration: %s", s)
 	}
 
-	// 解析单位
-	dur, ok := units[strings.ToLower(unit)]
+	unit, ok := durationUnits[strings.ToLower(matches[2])]
 	if !ok {
-		return 0, fmt.Errorf("unknown unit in duration: %s", unit)
+		return 0, fmt.Errorf("unknown unit in duration: %s", matches[2])
 	}
 
-	return time.Duration(num) * dur, nil
+	// 先转成 float64 再相乘、最后才转回 Duration：避免 time.Duration(num) 提前把
+	// 小数部分截断（例如 "1.5h" 曾经被错误地算成 1h 而不是 1h30m）。
+	return time.Duration(num * float64(unit)), nil
 }
 
 // GenerateToken 生成 JWT token 和 refresh token
@@ -133,7 +122,7 @@ func (j *JWT) GenerateToken(userID, username, roleKey string) (*TokenPair, error
 		},
 	}
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
-	accessTokenStr, err := accessToken.SignedString(j.SigningKey)
+	accessTokenStr, err := accessToken.SignedString(j.signingKey)
 	if err != nil {
 		return nil, fmt.Errorf("generate access token failed: %w", err)
 	}
@@ -150,7 +139,7 @@ func (j *JWT) GenerateToken(userID, username, roleKey string) (*TokenPair, error
 		},
 	}
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
-	refreshTokenStr, err := refreshToken.SignedString(j.SigningKey)
+	refreshTokenStr, err := refreshToken.SignedString(j.signingKey)
 	if err != nil {
 		return nil, fmt.Errorf("generate refresh token failed: %w", err)
 	}
@@ -168,7 +157,7 @@ func (j *JWT) ParseToken(tokenString string) (*Claims, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return j.SigningKey, nil
+		return j.signingKey, nil
 	})
 
 	if err != nil {
@@ -197,11 +186,4 @@ func (j *JWT) RefreshToken(refreshTokenStr string) (*TokenPair, error) {
 
 	// 生成新的 Token 对
 	return j.GenerateToken(claims.Identity, claims.Nice, claims.RoleKey)
-}
-
-// UserInfo 从上下文中获取的用户信息
-type UserInfo struct {
-	UserID   string
-	Username string
-	RoleKey  string
 }

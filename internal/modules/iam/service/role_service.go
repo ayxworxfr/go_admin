@@ -12,7 +12,6 @@ import (
 	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
-	"go.uber.org/zap"
 )
 
 // RoleService 角色管理服务：只负责角色本身的 CRUD 与角色-权限分配，
@@ -49,13 +48,13 @@ func (s *RoleService) CreateRole(ctx context.Context, req *dto.CreateRoleRequest
 	var permissionResponses []*dto.PermissionResponse
 	err := s.roleRepo.Transaction(ctx, func(txCtx context.Context) error {
 		if err := s.roleRepo.Create(txCtx, &role); err != nil {
-			logger.Error(txCtx, "Failed to create role", zap.Error(err))
+			logger.Error(txCtx, "Failed to create role", logger.Err(err))
 			return errors.Wrap(err, "failed to create role")
 		}
 
 		if len(req.PermissionIDs) > 0 {
 			if err := s.AssignRolePermissions(txCtx, role.ID, req.PermissionIDs); err != nil {
-				logger.Error(txCtx, "Failed to assign permissions to role", zap.Error(err), zap.Uint64("role_id", role.ID))
+				logger.Error(txCtx, "Failed to assign permissions to role", logger.Err(err), logger.Uint64("role_id", role.ID))
 				return errors.Wrap(err, "failed to assign permissions to role")
 			}
 		}
@@ -66,7 +65,7 @@ func (s *RoleService) CreateRole(ctx context.Context, req *dto.CreateRoleRequest
 
 		permissions, err := s.RetrievePermissionByRoleID(txCtx, role.ID)
 		if err != nil {
-			logger.Error(txCtx, "Failed to retrieve role permissions", zap.Error(err), zap.Uint64("role_id", role.ID))
+			logger.Error(txCtx, "Failed to retrieve role permissions", logger.Err(err), logger.Uint64("role_id", role.ID))
 			return errors.Wrap(err, "failed to retrieve role permissions")
 		}
 		if err := copier.Copy(&permissionResponses, &permissions); err != nil {
@@ -85,7 +84,7 @@ func (s *RoleService) CreateRole(ctx context.Context, req *dto.CreateRoleRequest
 func (s *RoleService) UpdateRole(ctx context.Context, req *dto.UpdateRoleRequest) (*dto.RoleResponse, error) {
 	role, err := s.roleRepo.FindByID(ctx, req.ID)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve role", zap.Error(err), zap.Uint64("role_id", req.ID))
+		logger.Error(ctx, "Failed to retrieve role", logger.Err(err), logger.Uint64("role_id", req.ID))
 		return nil, errors.Wrap(err, "failed to retrieve role")
 	}
 
@@ -94,13 +93,13 @@ func (s *RoleService) UpdateRole(ctx context.Context, req *dto.UpdateRoleRequest
 	}
 
 	if err := s.roleRepo.Update(ctx, role); err != nil {
-		logger.Error(ctx, "Failed to update role", zap.Error(err), zap.Uint64("role_id", req.ID))
+		logger.Error(ctx, "Failed to update role", logger.Err(err), logger.Uint64("role_id", req.ID))
 		return nil, errors.Wrap(err, "failed to update role")
 	}
 
 	if req.PermissionIDs != nil {
 		if err := s.AssignRolePermissions(ctx, role.ID, *req.PermissionIDs); err != nil {
-			logger.Error(ctx, "Failed to assign permissions to role", zap.Error(err), zap.Uint64("role_id", req.ID))
+			logger.Error(ctx, "Failed to assign permissions to role", logger.Err(err), logger.Uint64("role_id", req.ID))
 			return nil, errors.Wrap(err, "failed to assign permissions to role")
 		}
 	}
@@ -112,7 +111,7 @@ func (s *RoleService) UpdateRole(ctx context.Context, req *dto.UpdateRoleRequest
 
 	permissions, err := s.RetrievePermissionByRoleID(ctx, role.ID)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve role permissions", zap.Error(err), zap.Uint64("role_id", req.ID))
+		logger.Error(ctx, "Failed to retrieve role permissions", logger.Err(err), logger.Uint64("role_id", req.ID))
 		return nil, errors.Wrap(err, "failed to retrieve role permissions")
 	}
 	if err := copier.Copy(&result.Permissions, &permissions); err != nil {
@@ -136,7 +135,7 @@ func (s *RoleService) DeleteRoleBatch(ctx context.Context, ids []uint64) error {
 // DeleteRole 删除角色（事务内先删角色-权限关联，再删角色本身）
 func (s *RoleService) DeleteRole(ctx context.Context, id uint64) error {
 	if _, err := s.roleRepo.FindByID(ctx, id); err != nil {
-		logger.Error(ctx, "Failed to retrieve role", zap.Error(err), zap.Uint64("role_id", id))
+		logger.Error(ctx, "Failed to retrieve role", logger.Err(err), logger.Uint64("role_id", id))
 		return errors.Wrap(err, "failed to retrieve role")
 	}
 
@@ -155,7 +154,7 @@ func (s *RoleService) DeleteRole(ctx context.Context, id uint64) error {
 func (s *RoleService) GetRole(ctx context.Context, id uint64) (*dto.RoleResponse, error) {
 	role, err := s.roleRepo.FindByID(ctx, id)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve role", zap.Error(err), zap.Uint64("role_id", id))
+		logger.Error(ctx, "Failed to retrieve role", logger.Err(err), logger.Uint64("role_id", id))
 		return nil, errors.Wrap(err, "failed to retrieve role")
 	}
 
@@ -166,7 +165,7 @@ func (s *RoleService) GetRole(ctx context.Context, id uint64) (*dto.RoleResponse
 
 	permissions, err := s.RetrievePermissionByRoleID(ctx, role.ID)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve role permissions", zap.Error(err), zap.Uint64("role_id", id))
+		logger.Error(ctx, "Failed to retrieve role permissions", logger.Err(err), logger.Uint64("role_id", id))
 		return nil, errors.Wrap(err, "failed to retrieve role permissions")
 	}
 	if err := copier.Copy(&result.Permissions, &permissions); err != nil {
@@ -180,7 +179,7 @@ func (s *RoleService) GetRole(ctx context.Context, id uint64) (*dto.RoleResponse
 func (s *RoleService) GetRoleList(ctx context.Context, req *dto.GetRoleListRequest) ([]*dto.RoleResponse, int64, error) {
 	roles, total, err := s.roleRepo.FindPage(ctx, req, req.Limit, req.Offset)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve roles", zap.Error(err))
+		logger.Error(ctx, "Failed to retrieve roles", logger.Err(err))
 		return nil, 0, errors.Wrap(err, "failed to retrieve roles")
 	}
 
@@ -196,7 +195,7 @@ func (s *RoleService) GetRoleList(ctx context.Context, req *dto.GetRoleListReque
 	for i, role := range roles {
 		permissions, err := s.RetrievePermissionByRoleID(ctx, role.ID)
 		if err != nil {
-			logger.Error(ctx, "Failed to retrieve role permissions", zap.Error(err), zap.Uint64("role_id", role.ID))
+			logger.Error(ctx, "Failed to retrieve role permissions", logger.Err(err), logger.Uint64("role_id", role.ID))
 			return nil, 0, errors.Wrap(err, "failed to retrieve role permissions")
 		}
 		if err := copier.Copy(&result[i].Permissions, &permissions); err != nil {
@@ -211,7 +210,7 @@ func (s *RoleService) GetRoleList(ctx context.Context, req *dto.GetRoleListReque
 func (s *RoleService) GetRolePermissions(ctx context.Context, roleID uint64) ([]*dto.PermissionResponse, error) {
 	permissions, err := s.RetrievePermissionByRoleID(ctx, roleID)
 	if err != nil {
-		logger.Error(ctx, "Failed to retrieve role permissions", zap.Error(err), zap.Uint64("role_id", roleID))
+		logger.Error(ctx, "Failed to retrieve role permissions", logger.Err(err), logger.Uint64("role_id", roleID))
 		return nil, errors.Wrap(err, "failed to retrieve role permissions")
 	}
 
